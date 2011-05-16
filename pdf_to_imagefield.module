@@ -41,36 +41,6 @@ function pdf_to_imagefield_theme() {
 }
 
 /**
- * Implementation of hook_cron().
- * 
- * Check th ejob queue for recently added pdfs. Process them and attach the
- * results to the node.
- * 
- * @ingroup cronmethod
- */
-function pdf_to_imagefield_cron() {
-  $result = db_query_range('SELECT * FROM {pdf_to_imagefield} WHERE finished = 0', variable_get('pdf_to_imagefield_convert_pdf', 1), 0, 1);
-  while ($job = db_fetch_object($result)) {
-    $pdf_file = field_file_load($job->fid);
-    watchdog('pdf_to_imagefield', 'Processing cron queued jobs. !vars', array('!vars' => print_r(get_defined_vars(), 1)));
-    if (is_readable($pdf_file['filepath'])) {
-      foreach (filefield_get_field_list(NULL, $job->field) as $fieldname => $field) {
-        $images = pdf_to_imagefield_convert_pages($job, pdf_to_imagefield_widget_file_path($field), $pdf_file);
-        pdf_to_imagefield_save_converted($images, $field, $pdf_file);
-        db_query('UPDATE {pdf_to_imagefield} SET finished = %d WHERE fid = %d', time(), $job->fid);
-      }
-    }
-    else {
-      // Something's broken, file unavailable. Throw away this job.
-      watchdog('pdf_to_imagefield', 'Invalid job queued. PDF file was unavailable. Discarding the job', array(), WATCHDOG_WARNING);
-      db_query('DELETE FROM {pdf_to_imagefield} WHERE pid = %d',  $job->pid);
-    }
-  }
-}
-
-
-
-/**
  * Convert pages from pdf file to individual jpeg files
  * 
  * @param $job job definition object, defining the pdf file fid, the field name,
@@ -113,6 +83,7 @@ function pdf_to_imagefield_convert_pages($job, $path, $pdf_file) {
  * @return Object describing the new entry.
  */
 function pdf_to_imagefield_save_file($filepath) {
+  /*
   $file = new stdClass();
   $file->filename = basename($filepath);
   $file->filepath = $filepath;
@@ -121,6 +92,8 @@ function pdf_to_imagefield_save_file($filepath) {
   $file->status = 1;
   $file->timestamp = time();
   $file->uid = 1;
+*/
+  $file = pdf_to_imagefield_file_placeholder($filepath);
   drupal_write_record('files', $file);
   return $file;
 }
@@ -187,44 +160,69 @@ function pdf_to_imagefield_convert_pdf($source, $dest, $args = array(), $extra =
 
 
 /**
- * Add a given pdf file to the cron queue for later processing.
- * 
- * @param $pdf_file file data, describing the pdf filefield that is to be
- * scanned. The file data is an object, such as gets stored or retrieved in the
- * drupal 'files' table.
- * @param $source_filefield_def a cck filefield definition, including the rest
- * of the custom settings defining what to do with the converted results.
- * 
- * @ingroup cronmethod
- */
-function pdf_to_imagefield_queue_file($pdf_file, $source_filefield_def) {
-  $pdf_file = (object)$pdf_file;
-  $widget = $source_filefield_def['widget'];
-  $job = (object)array(
-    'fid' => $pdf_file->fid,
-    'field' => $widget['target_imagefield'],
-    'count' => 0,
-    'density_x' => preg_replace('/^([0-9]+)x[0-9]+$/', '\1', $widget['density']),
-    'density_y' => preg_replace('/^[0-9]+x([0-9]+)$/', '\1', $widget['density']),
-    'finished' => 0,
-  );
-  drupal_write_record('pdf_to_imagefield', $job);
-  watchdog('pdf_to_imagefield', 'Added %file to queue for later cron processing. Images will be generated on the next cron run.', array('%file' => $pdf_file->filepath));
-  drupal_set_message(t('Added %file to queue for conversion to images. It should happen soon.', array('%file' => basename($pdf_file->filepath))));
-}
-
-/**
  * Prepare the batch job to process a pdf file.
  * 
  */
-function pdf_to_imagefield_set_batch($node, $pdf_file, $source_filefield = NULL) {
-  $args = array($node->nid, $pdf_file['fid'], $source_filefield);
-  $operations[] = array('pdf_to_imagefield_process_pdf', $args);
-  batch_set(array(
-    'title' => t('Converting PDF'),
-    'operations' => $operations,
-  ));
+function pdf_to_imagefield_set_batch($node, $pdf, $source_filefield = NULL) {
+  $source_file = $pdf['filepath'];
+  $count = pdf_to_imagefield_count_pages($source_file);
+
+  // if count succeeded (some PDFs don't work) then set the batch job page-by-page
+  // so we can see the progress
+  if ($count) {
+    $operations = array();
+    for ($page = 0; $page < $count; $page++) {
+      $args = array($pdf, $source_filefield, $page);
+      $operations[] = array('pdf_to_imagefield_generate_page_batched', $args);
+    }
+    
+    // Once they are done, attach all the files to the node
+    $operations[] = array('pdf_to_imagefield_attach_pages_batched', array($node, $source_filefield));
+
+    batch_set(array(
+      'title' => t('Converting PDF, %count pages', array('%count' => $count)),
+      'operations' => $operations,
+      'progress_message' => t('Processed @current out of @total.'),
+    ));
+    
+  }
+  else {
+    // Try to do it in one, with no counter
+    $args = array($node->nid, $pdf, $source_filefield);
+    $operations[] = array('pdf_to_imagefield_process_pdf', $args);
+    batch_set(array(
+      'title' => t('Converting PDF', array('count' => $count)),
+      'operations' => $operations,
+    ));
+  }
   //batch_process();
+}
+
+/**
+ * Generate a single page for the given pdf file-source, according to the
+ * field settings.
+ * 
+ * @param $node the field is attached to 
+ * @param $source filefiled a field definition
+ * @return a managed jpeg file, already inserted into the files table.
+ * 
+ */
+function pdf_to_imagefield_generate_page_batched($pdf, $source_filefield, $page_number = 0, &$batch_context) {
+  $batch_context['message'] = t('Now processing %page_number', array('%page_number' => $page_number));  
+  $image = pdf_to_imagefield_generate_page($pdf, $source_filefield, $page_number);
+  $batch_context['results']['pages'][$image->fid] = $image;
+}
+
+function pdf_to_imagefield_attach_pages_batched($node, $source_filefield_def, &$batch_context) {
+  $batch_context['message'] = t('Attaching files to node', array());  
+  $pages = $batch_context['results']['pages'];
+  if (empty($pages)) {
+    return;
+  }
+  $target_filefield_name = $source_filefield_def['widget']['target_imagefield'];
+  pdf_to_imagefield_attach_files($pages, $node, $target_filefield_name);
+  # Save will be done for us?
+  #node_save($node);
 }
 
 
@@ -238,44 +236,6 @@ function pdf_to_imagefield_set_batch($node, $pdf_file, $source_filefield = NULL)
 function pdf_to_imagefield_file_delete($file) {
   db_query('DELETE FROM {pdf_to_imagefield} WHERE fid = %d', $file->fid);
 }
-
-
-/**
- * Generate a single page for the given pdf file-source, according to the
- * field settings.
- * 
- * @param $node the field is attached to 
- * @param $source filefiled a field definition
- * @return a managed jpeg file, already inserted into the files table.
- */
-function pdf_to_imagefield_generate_single_page($pdf_file, $source_filefield_def, $page_number = 0) {
-  if (empty($pdf_file['filepath']) || !file_exists($pdf_file['filepath'])) {
-    return NULL;
-  }
-  
-  // Security - ensure no nasty characters make it through to the commandline due to configuration passthroughs.
-  preg_match('/^([0-9]+)x([0-9]+)$/', $source_filefield_def['widget']['density'], $matches);
-  $density = "-density {$matches[1]}x{$matches[2]}";
-
-  $path = pdf_to_imagefield_widget_file_path($source_filefield_def);
-
-  // Adding [n] to the end of the pdf filename generates just the numbered page.
-  $source = $pdf_file['filepath'] . "[$page_number]";
-  $image_filename = $pdf_file['fid'] .'.jpg';
-  $image_filepath = $path .'/'. $image_filename;
-
-  pdf_to_imagefield_convert_pdf($source, $image_filepath, array(), array($density));
-  // This will have created a single file named after the file id.
-
-  if (file_exists($image_filepath)) {
-    // Insert file into files table
-    $image = pdf_to_imagefield_file_placeholder($image_filepath);
-    drupal_write_record('files', $image);
-    return $image;
-  }
-  // if no file, something must have failed. Too bad.
-}
-
 
 /**
  * Given an node and a file to process, do so.
@@ -344,17 +304,18 @@ function pdf_to_imagefield_node_presave(&$node) {
     foreach ($node->{$source_filefield} as $pdf_file) {
       if ($target_imagefield_def['multiple']) {
         // Add this job to the queue;
-        pdf_to_imagefield_queue_file($pdf_file, $source_filefield_def);
-        //pdf_to_imagefield_set_batch($node, $pdf_file, $source_filefield_def);
+        pdf_to_imagefield_set_batch($node, $pdf_file, $source_filefield_def);
       }
       else {
         // Multiple is off, so we will only do the cover page.
         // We can do this immediately.
         // Generate the cover page as a managed image file.
-        $image_file = pdf_to_imagefield_generate_single_page($pdf_file, $source_filefield_def, 0);
+        watchdog('pdf_to_imagefield', 'Generating a cover page for PDF %title .', array('%title' => $node->title), WATCHDOG_NOTICE);
+        $image_file = pdf_to_imagefield_generate_page($pdf_file, $source_filefield_def, 0);
         // And attach to the node
         if ($image_file) {
-          $node->{$target_imagefield}[] = (array) $image_file;
+          $node->{$target_imagefield}[0] = (array) $image_file;
+          watchdog('pdf_to_imagefield', 'Attaching new file as a cover page to %title .', array('%title' => $node->title), WATCHDOG_NOTICE);
         }
       }
       // node_save will do the rest later
@@ -371,6 +332,76 @@ function pdf_to_imagefield_node_presave(&$node) {
       unset($node->{$target_imagefield}[$i]);
     }
   }
+}
+
+/**
+ * Generate a single page for the given pdf file-source, according to the
+ * field settings.
+ * 
+ * @param $pdf a file data object
+ * @param $node the field is attached to 
+ * @param $source filefiled a field definition
+ * @return a managed jpeg file, already inserted into the files table.
+ * 
+ */
+function pdf_to_imagefield_generate_page($pdf, $source_filefield, $page_number = 0) {
+  if (empty($pdf['filepath']) || !file_exists($pdf['filepath'])) {
+    return NULL;
+  }
+  
+  // Security - ensure no nasty characters make it through to the commandline due to configuration passthroughs.
+  $density_x = preg_replace('/^([0-9]+)x[0-9]+$/', '\1', $source_filefield['widget']['density']);
+  $density_y = preg_replace('/^[0-9]+x([0-9]+)$/', '\1', $source_filefield['widget']['density']);
+  $density = "-density {$density_x}x{$density_y}";
+
+  $path = pdf_to_imagefield_widget_file_path($source_filefield);
+
+  // Adding [n] to the end of the pdf filename generates just the numbered page.
+  $source = $pdf['filepath'] . "[$page_number]";
+  $image_filename = $pdf['fid'] . '-' . $page_number .'.jpg';
+#  $image_filename = sprintf("[%03d]-[%03d]", $pdf['fid'], $page_number);
+  $image_filepath = $path .'/'. $image_filename;
+
+  pdf_to_imagefield_convert_pdf($source, $image_filepath, array(), array($density));
+  // This will have created a single file named after the file id.
+
+  if (file_exists($image_filepath)) {
+    // Insert file into files table
+    $image = pdf_to_imagefield_file_placeholder($image_filepath);
+    drupal_write_record('files', $image);
+    return $image;
+  }
+  // if no file, something must have failed. Too bad.
+}
+
+/**
+ * Use imagemagick routine to count the number of pages in a given PDF
+ */
+function pdf_to_imagefield_count_pages($filepath) {
+  // We can guess that if inmagemagick is installed, the identify function mst be close to it
+  $convert_path = variable_get('imageapi_imagemagick_convert', '/usr/bin/convert');
+  $identify_path = dirname($convert_path) . '/identify';
+  $command = "$identify_path -format %n " . escapeshellarg($filepath) . ' 2> /dev/null';
+  $count = shell_exec($command);
+  return $count;
+}
+
+/**
+ * Construct the data object needed to insert into the files table
+ */
+function pdf_to_imagefield_file_placeholder($filepath) {
+  global $user;
+  $image = (object) array(
+    'filename' => basename($filepath),
+    'filepath' => $filepath,
+    'filemime' => file_get_mimetype($filepath),
+    'filesize' => filesize($filepath),
+    'status' => 1,
+    'timestamp' => time(),
+    'uid' => $user->uid,
+    'list' => FALSE,
+  );
+  return $image;
 }
 
 /**
@@ -516,9 +547,10 @@ function pdf_to_imagefield_widget_settings_form($widget) {
   $form['file_extensions']['#disabled'] = TRUE;
   // create list of options to target form
   $imagefields = array();
+  $content_type = arg(3);
   $filefields = filefield_get_field_list(arg(3));
   foreach ($filefields as $key => $filefield) {
-    if ($filefield['widget']['module'] == 'imagefield' && $filefield['multiple'] == 1) {
+    if ($filefield['widget']['module'] == 'imagefield') {
       $imagefields[$key] = $filefield['widget']['label'] .' ('. $filefield['field_name'] .')';
     }
   }
@@ -532,7 +564,7 @@ function pdf_to_imagefield_widget_settings_form($widget) {
     '#title' => t('Target ImageField'),
     '#options' => $imagefields,
     '#default_value' => !empty($widget['target_imagefield']) ? $widget['target_imagefield'] : 0,
-    '#description' => t('Choose an ImageField where should be stored extracted pages. ImageField must be assigned to the same node type and should allow to upload multiple images.'),
+    '#description' => t('PDF to Imagefield processing requires an ImageField where the resulting images of extracted PDF pages should be stored. The ImageField must be assigned to the same node type. For all pages to be processed, the imagefield should allow multiple uploads. If the imagefield allows only one item, only the cover page will be processed.'),
   );
 
   $form['density'] = array(
