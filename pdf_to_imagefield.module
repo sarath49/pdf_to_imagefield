@@ -4,24 +4,11 @@
  * @file
  * PDF to ImageField core hooks and menu callbacks.
  * 
- * CCK widget settings are in an additional library file.
+ * TODO CCK widget settings could be moved to an additional library file.
+ * 
+ * @author original cron-based version by Peritus 2010
+ * @author batch-job rewrite and cover page feature additions by dman 2011
  */
-
-/**
- * Implementation of hook_menu().
- */
-function pdf_to_imagefield_menu() {
-  $items = array();
-  $items['admin/settings/pdf_to_imagefield'] = array(
-    'title' => 'PDF to ImageField',
-    'description' => 'Allow users to configure pdf conversion settings',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('pdf_to_imagefield_settings_form'),
-    'access arguments' => array('administer site configuration'),
-    'weight' => 1,
-  );
-  return $items;
-}
 
 /**
  * Implementation of hook_theme().
@@ -76,6 +63,7 @@ function pdf_to_imagefield_convert_pages($job, $path, $pdf_file) {
   return $converted;
 }
 
+
 /**
  * Save created image to files table.
  * 
@@ -83,16 +71,6 @@ function pdf_to_imagefield_convert_pages($job, $path, $pdf_file) {
  * @return Object describing the new entry.
  */
 function pdf_to_imagefield_save_file($filepath) {
-  /*
-  $file = new stdClass();
-  $file->filename = basename($filepath);
-  $file->filepath = $filepath;
-  $file->filemime = file_get_mimetype($filepath);
-  $file->filesize = filesize($filepath);
-  $file->status = 1;
-  $file->timestamp = time();
-  $file->uid = 1;
-*/
   $file = pdf_to_imagefield_file_placeholder($filepath);
   drupal_write_record('files', $file);
   return $file;
@@ -120,27 +98,14 @@ function pdf_to_imagefield_save_converted($images, $field, $pdf) {
 
 
 /**
- * Menu callback. Administrator settings
- */
-function pdf_to_imagefield_settings_form($form_state) {
-  $form = array();
-  $form['pdf_to_imagefield_convert_pdf'] = array(
-    '#type' => 'textfield',
-    '#title' => t('PDF file limit'),
-    '#description' => t('Maximum number of pdf files to process per cron run.'),
-    '#default_value' => variable_get('pdf_to_imagefield_convert_pdf', 1),
-    '#size' => 6
-  );
-  $form = system_settings_form($form);
-  return $form;
-}
-
-/**
- * Convert function (depends on ImageAPI module)
+ * Convert a PDF to an image, using ImageAPI.
+ * 
  * This is almost a copy of _imageapi_imagemagick_convert() function, with 
  * that addition of $extra argument, used to pass parameters to convert *BEFORE* 
  * source file specification. 
- * Here it is needed to set density before rendering a PDF  
+ * Here it is needed to set density before rendering a PDF.
+ * 
+ * @return bool success
  */
 function pdf_to_imagefield_convert_pdf($source, $dest, $args = array(), $extra = array()) {
   $d_arguments['quality'] = '-quality '. escapeshellarg(variable_get('imageapi_imagemagick_quality', 75));
@@ -160,8 +125,15 @@ function pdf_to_imagefield_convert_pdf($source, $dest, $args = array(), $extra =
 
 
 /**
- * Prepare the batch job to process a pdf file.
+ * Prepare the batch job to process a PDF file.
  * 
+ * Usually invoked on node_presave.
+ * This calls batch_set(), but doesn't trigger it.
+ * The queued batch job will run when a form is finished processing.
+ * 
+ * @param object $node
+ * @param array $pdf the cck data row being processed.
+ * @param $source_filefield the cck filefield definition. It must name the target imagefield in its widget settings.
  */
 function pdf_to_imagefield_set_batch($node, $pdf, $source_filefield = NULL) {
   $source_file = $pdf['filepath'];
@@ -198,6 +170,7 @@ function pdf_to_imagefield_set_batch($node, $pdf, $source_filefield = NULL) {
   //batch_process();
 }
 
+
 /**
  * Generate a single page for the given pdf file-source, according to the
  * field settings.
@@ -205,7 +178,6 @@ function pdf_to_imagefield_set_batch($node, $pdf, $source_filefield = NULL) {
  * @param $node the field is attached to 
  * @param $source filefiled a field definition
  * @return a managed jpeg file, already inserted into the files table.
- * 
  */
 function pdf_to_imagefield_generate_page_batched($pdf, $source_filefield, $page_number = 0, &$batch_context) {
   $batch_context['message'] = t('Now processing %page_number', array('%page_number' => $page_number));  
@@ -213,6 +185,11 @@ function pdf_to_imagefield_generate_page_batched($pdf, $source_filefield, $page_
   $batch_context['results']['pages'][$image->fid] = $image;
 }
 
+/**
+ * Attach files to a node, as a batch callback.
+ * 
+ * @see pdf_to_imagefield_attach_files()
+ */
 function pdf_to_imagefield_attach_pages_batched($node, $source_filefield_def, &$batch_context) {
   $batch_context['message'] = t('Attaching files to node', array());  
   $pages = $batch_context['results']['pages'];
@@ -227,18 +204,7 @@ function pdf_to_imagefield_attach_pages_batched($node, $source_filefield_def, &$
 
 
 /**
- * Implementation of hook_file_delete().
- *
- * Delete this job from our table
- * 
- * @ingroup cronmethod
- */
-function pdf_to_imagefield_file_delete($file) {
-  db_query('DELETE FROM {pdf_to_imagefield} WHERE fid = %d', $file->fid);
-}
-
-/**
- * Given an node and a file to process, do so.
+ * Given an node and a PDF file to process, do so.
  */
 function pdf_to_imagefield_process_pdf(&$node, $source_file, $source_filefield_def) {
   // Args may either be the full objects, or just identifiers for those objects : nid,fid, fieldname
@@ -324,6 +290,7 @@ function pdf_to_imagefield_node_presave(&$node) {
   // On the other hand, if the filefield is empty and the images full, 
   // the original has just been deleted. filefield widget does that
   // earlier - to early for me to get in on it.
+  // So, delete these derived images.
   if (pdf_to_imagefield_empty_filefield($node->{$source_filefield}) && !pdf_to_imagefield_empty_filefield($node->{$target_imagefield})) {
     watchdog('pdf_to_imagefield', 'Deleting all the image fields previously attached to %title as derivatives of the deleted PDF file.', array('%title' => $node->title), WATCHDOG_NOTICE);
     foreach ($node->{$target_imagefield} as $i => $image_file ) {
@@ -342,7 +309,6 @@ function pdf_to_imagefield_node_presave(&$node) {
  * @param $node the field is attached to 
  * @param $source filefiled a field definition
  * @return a managed jpeg file, already inserted into the files table.
- * 
  */
 function pdf_to_imagefield_generate_page($pdf, $source_filefield, $page_number = 0) {
   if (empty($pdf['filepath']) || !file_exists($pdf['filepath'])) {
@@ -359,7 +325,6 @@ function pdf_to_imagefield_generate_page($pdf, $source_filefield, $page_number =
   // Adding [n] to the end of the pdf filename generates just the numbered page.
   $source = $pdf['filepath'] . "[$page_number]";
   $image_filename = $pdf['fid'] . '-' . $page_number .'.jpg';
-#  $image_filename = sprintf("[%03d]-[%03d]", $pdf['fid'], $page_number);
   $image_filepath = $path .'/'. $image_filename;
 
   pdf_to_imagefield_convert_pdf($source, $image_filepath, array(), array($density));
@@ -387,7 +352,12 @@ function pdf_to_imagefield_count_pages($filepath) {
 }
 
 /**
- * Construct the data object needed to insert into the files table
+ * Construct the data object needed to insert into the files table.
+ * 
+ * Util to assist file attaching.
+ * 
+ * @param string filepath
+ * @return object describing the file
  */
 function pdf_to_imagefield_file_placeholder($filepath) {
   global $user;
@@ -490,15 +460,8 @@ function pdf_to_imagefield_elements() {
 
 
 /**
- * Implementation of CCK's hook_widget().
+ * Declare that this module provides a new widget for handling filefields.
  * 
- * Stub to the normal filefield behavior
- */
-function pdf_to_imagefield_widget(&$form, &$form_state, $field, $items, $delta = 0) {
-  return filefield_widget($form, $form_state, $field, $items, $delta);
-}
-
-/**
  * Implementation of CCK's hook_widget_info().
  */
 function pdf_to_imagefield_widget_info() {
@@ -515,6 +478,19 @@ function pdf_to_imagefield_widget_info() {
 }
 
 /**
+ * Define what the PDF filefield UI widget looks like.
+ * 
+ * Implementation of CCK's hook_widget().
+ * 
+ * Stub to the normal filefield behavior.
+ */
+function pdf_to_imagefield_widget(&$form, &$form_state, $field, $items, $delta = 0) {
+  return filefield_widget($form, $form_state, $field, $items, $delta);
+}
+
+/**
+ * Declare what happens when someone uses our widget
+ * 
  * Implementation of CCK's hook_widget_settings().
  */
 function pdf_to_imagefield_widget_settings($op, $widget) {
@@ -599,12 +575,54 @@ function pdf_to_imagefield_widget_settings_save($widget) {
 
 /**
  * Element #process callback function.
+ * 
+ * #process runs even when previewing a new node (unlike nodeapi presave)
+ * 
+ * (unused currently)
+ * 
  */
 function pdf_to_imagefield_widget_process($element, $edit, &$form_state, $form) {
+  // It figures that a user would like to actually preview the cover page 
+  // image when 'previewing'.
+  // TODO See if we can do that.
+  // Hmm. During widget process on a new node, the $node object doesn't seem to be handy to modify.
+  /*
+   * NEEDS WORK
+  if (isset($form_state['node'])) {
+    $node = $form_state['node'];
+    $source_filefield = $element['#field_name'];
+    $source_filefield_def = content_fields($source_filefield, $node['type']);
+    $target_imagefield = $source_filefield_def['widget']['target_imagefield'];
+    $target_imagefield_def = content_fields($target_imagefield, $node['type']);
+  
+    // Is the source filefield full and the target image holder empty?
+    if (!pdf_to_imagefield_empty_filefield($node[$source_filefield]) && pdf_to_imagefield_empty_filefield($node[$target_imagefield])) {
+      $pdfs = $node[$source_filefield];
+      if (!empty($pdfs)) {
+        $pdf_file = reset($pdfs);
+        if ($target_imagefield_def['multiple'] == 0) {
+          // we can attempt to build the one page derivative image immediately
+          $image_file = pdf_to_imagefield_generate_page($pdf_file, $source_filefield_def, 0);
+          // TODO, set the status to temporry for now
+          // And attach to the node
+          if ($image_file) {
+            $form_state['node'][$target_imagefield][0] = (array) $image_file;
+            $form[$target_imagefield][0]['#default_value'] = (array) $image_file;
+            watchdog('pdf_to_imagefield', 'Attaching new file as a cover page to %title .', array('%title' => $node->title), WATCHDOG_NOTICE);
+          }
+        }
+      }
+    }
+    dpm(get_defined_vars());
+  }
+  */
+    
+  /*
   $file = $element['#value'];
   if (isset($element['preview']) && $file['fid'] != 0) {
     $element['preview']['#value'] = theme('pdf_to_imagefield_widget_preview', $file);
   }
+  */
   return $element;
 }
 
@@ -616,28 +634,16 @@ function theme_pdf_to_imagefield_widget($element) {
   return theme('form_element', $element, $element['#children']);
 }
 
-
 /**
- * Widget previews theme
+ * Theme the file upload widget.
+ * 
+ * Was called from pdf_to_imagefield_widget_process()
  */
 function theme_pdf_to_imagefield_widget_preview($file) {
-  // Remove the current description so that we get the filename as the link.
-  if (isset($file['data']['description'])) {
-    unset($file['data']['description']);
-  }
-  // get finished date or zero if not
-  $finished = db_result(db_query_range('SELECT finished FROM {pdf_to_imagefield} WHERE fid = %d', $file['fid'], 0, 1));
-  // define status text
-  $status = $finished
-    ? t('Page previews generated at %date', array('%date' => format_date($finished, 'custom', 'Y.m.d H:i')))
-    : t('Page previews generation not completed. Waiting in queue.');
-  // return output
-  return '<div class="filefield-file-info">'.
-           '<div class="filename">'. theme('filefield_file', $file) .'</div>'.
-           '<div class="filesize">'. format_size($file['filesize']) .'</div>'.
-           '<div class="filemime">'. $file['filemime'] .'</div>'.
-           '<div class="pdfstatus"><small>'. $status .'</small></div>'.
-         '</div>';
+  // We *could* render this different, but now just
+  // stub out to normal filefield widget rendering
+  return theme('filefield_widget_preview', $item);
+  // TODO make this file display the thumbnail?
 }
 
 /**
@@ -665,7 +671,6 @@ function pdf_to_imagefield_check_imagemagick($widget) {
   }
   return FALSE;
 }
-
 
 /**
  * Check if field path is good to save file
