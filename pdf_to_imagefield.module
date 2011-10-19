@@ -331,7 +331,7 @@ function pdf_to_imagefield_node_presave(&$node) {
     foreach ($node->{$target_imagefield} as $i => $image_file ) {
       $removed_file = field_file_load($image_file['fid']);
       field_file_delete($image_file);
-      unset($node->{$target_imagefield}[$i]);
+      $node->{$target_imagefield}[$i] = array();
     }
   }
 }
