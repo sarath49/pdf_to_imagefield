@@ -40,7 +40,7 @@ function pdf_to_imagefield_disable() {
 
 /**
  * Implementation of hook_requirements().
- * 
+ *
  * Complain if the imagemagic path doesn't work
  */
 function pdf_to_imagefield_requirements($phase) {
