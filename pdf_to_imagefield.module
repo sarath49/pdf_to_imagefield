@@ -205,8 +205,10 @@ function pdf_to_imagefield_attach_pages_batched($node, $source_filefield_def, &$
 
 /**
  * Given an node and a PDF file to process, do so.
+ * 
+ * This func is most often called from inside a batch process.
  */
-function pdf_to_imagefield_process_pdf(&$node, $source_file, $source_filefield_def) {
+function pdf_to_imagefield_process_pdf($node, $source_file, $source_filefield_def) {
   // Args may either be the full objects, or just identifiers for those objects : nid,fid, fieldname
   if (is_numeric($node)) {
     $node = node_load($node);
@@ -278,6 +280,11 @@ function pdf_to_imagefield_node_presave(&$node) {
         // Generate the cover page as a managed image file.
         watchdog('pdf_to_imagefield', 'Generating a cover page for PDF %title .', array('%title' => $node->title), WATCHDOG_NOTICE);
         $image_file = pdf_to_imagefield_generate_page($pdf_file, $source_filefield_def, 0);
+
+        // CCK complains a little if the new field doesn't have a data array attached.
+        // Pointless, but it removes a strict warning.
+        $image_file->data = array();
+        
         // And attach to the node
         if ($image_file) {
           $node->{$target_imagefield}[0] = (array) $image_file;
@@ -426,6 +433,8 @@ function pdf_to_imagefield_attach_files($images, $node, $field_name) {
   if (count($images)) {
     foreach ($images as $image) {
       $image->list = FALSE;
+      // CCK complains a little if there is no -> data array at all.
+      $image->data = array();
       $node->{$field_name}[] = (array) $image;
     }
     node_save($node);
