@@ -252,11 +252,17 @@ function pdf_to_imagefield_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
   if (!$source_filefield_def) {
     return;
   }
-
   switch ($op) {
     case 'presave' :
-      // operations happen at presave, due to the way filefield handles things 
+      // Single operations happen at presave, 
+      // because then we can let filefield do the saving.
       return pdf_to_imagefield_node_presave($node);
+      break;
+    case 'insert' :
+      // Batch operations happen at postsave, because we need to have a nid.
+      // Batch ops trigger their own save (which by then is an update)
+      // Beware of cycles - don't set a batch in update, or it will loop.
+      return pdf_to_imagefield_node_insert($node);
       break;
   }  // /switch
 }
@@ -282,7 +288,10 @@ function pdf_to_imagefield_node_presave(&$node) {
     foreach ($node->{$source_filefield} as $pdf_file) {
       if ($target_imagefield_def['multiple']) {
         // Add this job to the queue;
-        pdf_to_imagefield_set_batch($node, $pdf_file, $source_filefield_def);
+        // Only if there is a nid to tell it (node is not new)
+        if ($node->nid) {
+          pdf_to_imagefield_set_batch($node, $pdf_file, $source_filefield_def);
+        }
       }
       else {
         // Multiple is off, so we will only do the cover page.
@@ -314,6 +323,32 @@ function pdf_to_imagefield_node_presave(&$node) {
       $removed_file = field_file_load($image_file['fid']);
       field_file_delete($image_file);
       unset($node->{$target_imagefield}[$i]);
+    }
+  }
+}
+
+/**
+ * hook_node_insert() nodapi subroutine
+ * 
+ * Check to see if this node has a pdf file that needs processing now that the initial save is done. 
+ * 
+ * This is a brand new node, with a fresh nid
+ */
+function pdf_to_imagefield_node_insert(&$node) {
+  $type = content_types($node->type);
+  $source_filefield_def = pdf_to_imagefield_source_filefield($node);
+  $source_filefield = $source_filefield_def['field_name'];
+  $target_imagefield = $source_filefield_def['widget']['target_imagefield'];
+  $target_imagefield_def = $type['fields'][$target_imagefield];
+
+  // Is the source filefield full and the target image holder empty?
+  if (!pdf_to_imagefield_empty_filefield($node->{$source_filefield}) && pdf_to_imagefield_empty_filefield($node->{$target_imagefield})) {
+    // Select the pdf entry(s?) in the specified filefield.
+    foreach ($node->{$source_filefield} as $pdf_file) {
+      if ($target_imagefield_def['multiple']) {
+        // Add this job to the queue. Needed to run post-save so we can tell the batch call about the nid.
+        pdf_to_imagefield_set_batch($node, $pdf_file, $source_filefield_def);
+      }
     }
   }
 }
