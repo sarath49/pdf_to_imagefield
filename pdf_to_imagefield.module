@@ -136,6 +136,11 @@ function pdf_to_imagefield_convert_pdf($source, $dest, $args = array(), $extra =
  * @param $source_filefield the cck filefield definition. It must name the target imagefield in its widget settings.
  */
 function pdf_to_imagefield_set_batch($node, $pdf, $source_filefield = NULL) {
+  if (empty($node->nid)) {
+    watchdog('pdf_to_imagefield', "Invalid node or node identifier in %function - Not setting up batch.", array('%function' => __FUNCTION__), WATCHDOG_ERROR);
+    return;
+  }
+  
   $source_file = $pdf['filepath'];
   $count = pdf_to_imagefield_count_pages($source_file);
 
@@ -165,6 +170,7 @@ function pdf_to_imagefield_set_batch($node, $pdf, $source_filefield = NULL) {
     batch_set(array(
       'title' => t('Converting PDF', array('count' => $count)),
       'operations' => $operations,
+      'progress_message' => t('Page count failed, not sure how long this will take.'),
     ));
   }
   //batch_process();
@@ -212,6 +218,10 @@ function pdf_to_imagefield_process_pdf($node, $source_file, $source_filefield_de
   // Args may either be the full objects, or just identifiers for those objects : nid,fid, fieldname
   if (is_numeric($node)) {
     $node = node_load($node);
+  }
+  if (empty($node)) {
+    watchdog('pdf_to_imagefield', "Invalid node or node identifier in %function - Can't attach files to nothing, aborting", array('%function' => __FUNCTION__), WATCHDOG_ERROR);
+    return;
   }
   if (is_numeric($source_file)) {
     $source_file = field_file_load($source_file);
@@ -391,7 +401,12 @@ function pdf_to_imagefield_file_placeholder($filepath) {
  */
 function pdf_to_imagefield_source_filefield($node) {
   // See if this node has a pdf_to_imagefield field 
-  // and it's got content 
+  // and it's got content
+  if (empty($node->type)) {
+    // that's illegal. odd.
+    watchdog('pdf_to_imagefield', 'Given a blank node to inspect. Something is wrong', array(), WATCHDOG_ERROR);
+    return;
+  }
   $type = content_types($node->type);
   if (empty($type['fields'])) {
     // No CCK, return immediately
