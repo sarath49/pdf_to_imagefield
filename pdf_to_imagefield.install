@@ -6,7 +6,7 @@
  */
 
 /**
- * Implementation of hook_install().
+ * Implements hook_install().
  */
 function pdf_to_imagefield_install() {
   drupal_load('module', 'content');
@@ -14,7 +14,7 @@ function pdf_to_imagefield_install() {
 }
 
 /**
- * Implementation of hook_uninstall().
+ * Implements hook_uninstall().
  */
 function pdf_to_imagefield_uninstall() {
   drupal_load('module', 'content');
@@ -22,7 +22,7 @@ function pdf_to_imagefield_uninstall() {
 }
 
 /**
- * Implementation of hook_enable().
+ * Implements hook_enable().
  */
 function pdf_to_imagefield_enable() {
   drupal_load('module', 'content');
@@ -30,7 +30,7 @@ function pdf_to_imagefield_enable() {
 }
 
 /**
- * Implementation of hook_disable().
+ * Implements hook_disable().
  */
 function pdf_to_imagefield_disable() {
   drupal_load('module', 'content');
@@ -39,7 +39,7 @@ function pdf_to_imagefield_disable() {
 
 
 /**
- * Implementation of hook_requirements().
+ * Implements hook_requirements().
  *
  * Complain if the imagemagic path doesn't work
  */
@@ -58,7 +58,7 @@ function pdf_to_imagefield_requirements($phase) {
       $requirements['pdf_to_imagefield'] = array(
         'value' => t('Problem with the imagemagick conversion toolkit.'),
         'severity' => REQUIREMENT_ERROR,
-        'description' => t('Failed to convert a test PDF. Check the <a href="@link">imagemagick settings</a> are correct, and then see the pdf_to_imagefield INSTALL for instructions if it still doesn\'t work.', array('@link' => url('admin/settings/imageapi/config'))),
+        'description' => t('Failed to convert a test PDF. Check the <a href="@link">imagemagick settings</a> are correct, and then see the pdf_to_imagefield INSTALL for instructions if it still doesn\'t work.', array('@link' => url('admin/config/media/imageapi/config'))),
       );
     }
     $requirements['pdf_to_imagefield']['title'] = t('PDF to ImageField');

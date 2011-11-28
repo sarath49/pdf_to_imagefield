@@ -11,18 +11,18 @@
  */
 
 /**
- * Implementation of hook_theme().
+ * Implements hook_theme().
  */
 function pdf_to_imagefield_theme() {
   return array(
     // pdf_to_imagefield_widget form element type theme function.
     'pdf_to_imagefield_widget' => array(
-      'arguments' => array('element' => NULL),
+      'render element' => 'element',
     ),
     // Use to generate a preview (admin view) of an imagefield item for use in
     // field item forms and filefield widgets. Invoked by filefield_widget_process.
     'pdf_to_imagefield_widget_preview' => array(
-      'arguments' => array('item' => NULL),
+      'variables' => array('item' => NULL),
     ),
   );
 }
@@ -245,6 +245,25 @@ function pdf_to_imagefield_process_pdf($node, $source_file, $source_filefield_de
 
 
 /**
+ * Implements hook_node_presave().
+ */
+function pdf_to_imagefield_node_presave($node) {
+  // Single operations happen at presave,
+  // because then we can let filefield do the saving.
+  return pdf_to_imagefield_node_presave($node);
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function pdf_to_imagefield_node_insert($node) {
+  // Batch operations happen at postsave, because we need to have a nid.
+  // Batch ops trigger their own save (which by then is an update)
+  // Beware of cycles - don't set a batch in update, or it will loop.
+  return pdf_to_imagefield_node_insert($node);
+}
+
+/**
  * hook_nodeapi
  *
  * When saving a node, see if it's got a PDF that needs converting. Pass
@@ -255,24 +274,12 @@ function pdf_to_imagefield_process_pdf($node, $source_file, $source_filefield_de
  * Sometimes we have to wait till after (save new node) and start a batch then.
  * - this might be reduced to two cases, but not sure..
  */
-function pdf_to_imagefield_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+function pdf_to_imagefield_nodeapi_OLD(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  // TODO Remaining code in this function needs to be moved to the appropriate new hook function.
   // First check if this node has one of our widgets active.
   $source_filefield_def = pdf_to_imagefield_source_filefield($node);
   if (!$source_filefield_def) {
     return;
-  }
-  switch ($op) {
-    case 'presave':
-      // Single operations happen at presave,
-      // because then we can let filefield do the saving.
-      return pdf_to_imagefield_node_presave($node);
-      break;
-    case 'insert':
-      // Batch operations happen at postsave, because we need to have a nid.
-      // Batch ops trigger their own save (which by then is an update)
-      // Beware of cycles - don't set a batch in update, or it will loop.
-      return pdf_to_imagefield_node_insert($node);
-      break;
   } // /switch
 }
 
@@ -428,7 +435,7 @@ function pdf_to_imagefield_file_placeholder($filepath) {
     'filemime' => file_get_mimetype($filepath),
     'filesize' => filesize($filepath),
     'status' => 1,
-    'timestamp' => time(),
+    'timestamp' => REQUEST_TIME,
     'uid' => $user->uid,
     'list' => FALSE,
   );
@@ -513,11 +520,11 @@ function pdf_to_imagefield_attach_files($images, $node, $field_name) {
  */
 
 /**
- * Implementation of hook_elements().
+ * Implements hook_element_info().
  *
  * Publishes our custom filefield widget.
  */
-function pdf_to_imagefield_elements() {
+function pdf_to_imagefield_element_info() {
   $elements = array();
   // An PDF to ImageField is really just a FileField.
   $filefield_elements = module_invoke('filefield', 'elements');
@@ -530,7 +537,7 @@ function pdf_to_imagefield_elements() {
 /**
  * Declare that this module provides a new widget for handling filefields.
  *
- * Implementation of CCK's hook_widget_info().
+ * Implements hook_widget_info().
  */
 function pdf_to_imagefield_widget_info() {
   $module_path = drupal_get_path('module', 'pdf_to_imagefield');
@@ -548,7 +555,7 @@ function pdf_to_imagefield_widget_info() {
 /**
  * Define what the PDF filefield UI widget looks like.
  *
- * Implementation of CCK's hook_widget().
+ * Implements hook_widget().
  *
  * Stub to the normal filefield behavior.
  */
@@ -559,7 +566,7 @@ function pdf_to_imagefield_widget(&$form, &$form_state, $field, $items, $delta =
 /**
  * Declare what happens when someone uses our widget
  *
- * Implementation of CCK's hook_widget_settings().
+ * Implements hook_widget_settings().
  */
 function pdf_to_imagefield_widget_settings($op, $widget) {
   switch ($op) {
@@ -578,7 +585,7 @@ function pdf_to_imagefield_widget_settings($op, $widget) {
  */
 
 /**
- * Implementation of CCK's hook_widget_settings($op = 'form').
+ * Implements hook_widget_settings($op = 'form')().
  */
 function pdf_to_imagefield_widget_settings_form($widget) {
   if (!pdf_to_imagefield_check_imagemagick($widget)) {
@@ -630,7 +637,7 @@ function pdf_to_imagefield_widget_settings_form($widget) {
 }
 
 /**
- * Implementation of CCK's hook_widget_settings($op = 'validate').
+ * Implements hook_widget_settings($op = 'validate')().
  */
 function pdf_to_imagefield_widget_settings_validate($widget) {
   // Check that set density is valid.
@@ -640,7 +647,7 @@ function pdf_to_imagefield_widget_settings_validate($widget) {
 }
 
 /**
- * Implementation of CCK's hook_widget_settings($op = 'save').
+ * Implements hook_widget_settings($op = 'save')().
  */
 function pdf_to_imagefield_widget_settings_save($widget) {
   $filefield_settings = module_invoke('filefield', 'widget_settings', 'save', $widget);
@@ -668,7 +675,8 @@ function pdf_to_imagefield_widget_process($element, $edit, &$form_state, $form) 
 /**
  * FormAPI theme function. Theme the output of an pdf field.
  */
-function theme_pdf_to_imagefield_widget($element) {
+function theme_pdf_to_imagefield_widget($variables) {
+  $element = $variables['element'];
   $element['#id'] .= '-upload'; // Link the label to the upload field.
   return theme('form_element', $element, $element['#children']);
 }
@@ -678,15 +686,17 @@ function theme_pdf_to_imagefield_widget($element) {
  *
  * Was called from pdf_to_imagefield_widget_process()
  */
-function theme_pdf_to_imagefield_widget_preview($file) {
+function theme_pdf_to_imagefield_widget_preview($variables) {
+  $file = $variables['item'];
   // We *could* render this different, but now just
   // stub out to normal filefield widget rendering
+  // TODO Please change this theme call to use an associative array for the $variables parameter.
   return theme('filefield_widget_preview', $item);
   // TODO make this file display the thumbnail?
 }
 
 /**
- * Implementation of CCK's hook_default_value().
+ * Implements hook_default_value().
  *
  * Stub to the normal filefield behavior
  */
@@ -716,7 +726,7 @@ function pdf_to_imagefield_check_imagemagick($widget) {
  */
 function pdf_to_imagefield_widget_file_path($field) {
   $path = filefield_widget_file_path($field);
-  if (!file_check_directory($path, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS, 'default_path')) {
+  if (!file_prepare_directory($path, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS, 'default_path')) {
     return FALSE;
   }
   return $path;
@@ -730,7 +740,7 @@ function pdf_to_imagefield_widget_file_path($field) {
 function pdf_to_imagefield_check_file($file) {
   // Check if variables are in place.
   if (!isset($file->field['widget']['module'])
-       || $file->field['widget']['module'] != 'pdf_to_imagefield'
+        || $file->field['widget']['module'] != 'pdf_to_imagefield'
     ) {
     watchdog('pdf_to_imagefield', 'Invalid configuration, %pdf file.', array('%pdf' => $file['filename']));
     return FALSE;

@@ -1,3 +1,3 @@
 <?php
 
-include_once('pdf_document.features.inc');
+include_once DRUPAL_ROOT . '/' . 'pdf_document.features.inc';
