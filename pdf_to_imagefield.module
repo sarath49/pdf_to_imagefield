@@ -42,7 +42,7 @@ function pdf_to_imagefield_convert_pages($job, $path, $pdf_file) {
   $source = $pdf_file['filepath'];
   $filepath = $path . '/' . $pdf_file['fid'] . '.jpg';
   $extra = array(
-    '-density '. $job->density_x .'x'. $job->density_y
+    '-density ' . $job->density_x . 'x' . $job->density_y,
   );
   if (!empty($job->extra_args)) {
     $extra[] = escapeshellcmd($job->extra_args);
@@ -50,9 +50,9 @@ function pdf_to_imagefield_convert_pages($job, $path, $pdf_file) {
   watchdog('pdf_to_imagefield', 'Converting PDF [%source] now.', array('%source' => $source), WATCHDOG_INFO);
   pdf_to_imagefield_convert_pdf($source, $filepath, array(), $extra);
 
-  // Scan for resulting files. 
+  // Scan for resulting files.
   $converted = array();
-  // Single page pdfs will have been created with just a filename. 
+  // Single page pdfs will have been created with just a filename.
   // Multipage results are numbered.
   if (file_exists($filepath)) {
     $converted[] = pdf_to_imagefield_save_file($filepath);
@@ -208,7 +208,7 @@ function pdf_to_imagefield_attach_pages_batched($node, $source_filefield_def, &$
   }
   $target_filefield_name = $source_filefield_def['widget']['target_imagefield'];
   pdf_to_imagefield_attach_files($pages, $node, $target_filefield_name);
-  # Save will be done for us in the _attach_files func.
+  // Save will be done for us in the _attach_files func.
 }
 
 
@@ -249,7 +249,7 @@ function pdf_to_imagefield_process_pdf($node, $source_file, $source_filefield_de
  *
  * When saving a node, see if it's got a PDF that needs converting. Pass
  * processing to individual op handlers, D7-style
- * 
+ *
  * Sometimes we do the process immediately (single page)
  * Sometimes we start a batch early (re-save an existing node)
  * Sometimes we have to wait till after (save new node) and start a batch then.
@@ -263,7 +263,7 @@ function pdf_to_imagefield_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
   }
   switch ($op) {
     case 'presave':
-      // Single operations happen at presave, 
+      // Single operations happen at presave,
       // because then we can let filefield do the saving.
       return pdf_to_imagefield_node_presave($node);
       break;
@@ -322,7 +322,7 @@ function pdf_to_imagefield_node_presave(&$node) {
       // node_save will do the rest later
     }
   }
-  // On the other hand, if the filefield is empty and the images full, 
+  // On the other hand, if the filefield is empty and the images full,
   // the original has just been deleted. filefield widget does that
   // earlier - to early for me to get in on it.
   // So, delete these derived images.
@@ -444,7 +444,7 @@ function pdf_to_imagefield_file_placeholder($filepath) {
  * widget settings.
  */
 function pdf_to_imagefield_source_filefield($node) {
-  // See if this node has a pdf_to_imagefield field 
+  // See if this node has a pdf_to_imagefield field
   // and it's got content
   if (empty($node->type)) {
     // that's illegal. odd.
@@ -624,7 +624,7 @@ function pdf_to_imagefield_widget_settings_form($widget) {
     '#title' => t('Extra conversion arguments'),
     '#description' => t('Enter optional <a href="http://imagemagick.org/Usage/formats/#ps">additional parameters to be used by the imagemagick conversion</a> if needed.<br/>eg <code>-trim +repage<code>'),
     '#default_value' => !empty($widget['extra_args']) ? $widget['extra_args'] : '',
-    '#size' => 20
+    '#size' => 20,
   );
   return $form;
 }
@@ -657,11 +657,11 @@ function pdf_to_imagefield_widget_settings_save($widget) {
  *
  */
 function pdf_to_imagefield_widget_process($element, $edit, &$form_state, $form) {
-  // It figures that a user would like to actually preview the cover page 
+  // It figures that a user would like to actually preview the cover page
   // image when 'previewing'.
   // TODO See if we can do that.
   // .. currently too hard.
-  
+
   return $element;
 }
 
@@ -729,8 +729,8 @@ function pdf_to_imagefield_widget_file_path($field) {
  */
 function pdf_to_imagefield_check_file($file) {
   // Check if variables are in place.
-  if (!isset($file->field['widget']['module']) 
-     || $file->field['widget']['module'] != 'pdf_to_imagefield'
+  if (!isset($file->field['widget']['module'])
+       || $file->field['widget']['module'] != 'pdf_to_imagefield'
     ) {
     watchdog('pdf_to_imagefield', 'Invalid configuration, %pdf file.', array('%pdf' => $file['filename']));
     return FALSE;
