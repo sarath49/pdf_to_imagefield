@@ -4,7 +4,7 @@
  * @file
  * PDF to ImageField core hooks and menu callbacks.
  *
- * TODO CCK widget settings could be moved to an additional library file.
+ * TODO THIS IS AN AUTOMATED CONVERSION FROM D6 - needs lots of fix-up
  *
  * @author original cron-based version by Peritus 2010
  * @author batch-job rewrite and cover page feature additions by dman 2011
@@ -119,7 +119,7 @@ function pdf_to_imagefield_convert_pdf($source, $dest, $args = array(), $extra =
   // See http://www.imagemagick.org/Usage/basics/#cmdline for more info.
 
   $command = implode(' ', $extra) . ' ' . escapeshellarg($source) . ' ' . implode(' ', $args) . ' ' . escapeshellarg($dest);
-  if (0 != _imageapi_imagemagick_convert_exec($command, $output, $errors)) {
+  if (0 != _imagemagick_convert_exec($command, $output, $errors)) {
     $errors_txt = '<pre>' . (is_array($errors) ? implode("\n", $errors) : $errors) . '</pre>';
     watchdog('pdf to image: imageapi imagemagick', '!errors', array('!errors' => $errors_txt), WATCHDOG_ERROR);
     return FALSE;
@@ -243,45 +243,6 @@ function pdf_to_imagefield_process_pdf($node, $source_file, $source_filefield_de
   return count($images);
 }
 
-
-/**
- * Implements hook_node_presave().
- */
-function pdf_to_imagefield_node_presave($node) {
-  // Single operations happen at presave,
-  // because then we can let filefield do the saving.
-  return pdf_to_imagefield_node_presave($node);
-}
-
-/**
- * Implements hook_node_insert().
- */
-function pdf_to_imagefield_node_insert($node) {
-  // Batch operations happen at postsave, because we need to have a nid.
-  // Batch ops trigger their own save (which by then is an update)
-  // Beware of cycles - don't set a batch in update, or it will loop.
-  return pdf_to_imagefield_node_insert($node);
-}
-
-/**
- * hook_nodeapi
- *
- * When saving a node, see if it's got a PDF that needs converting. Pass
- * processing to individual op handlers, D7-style
- *
- * Sometimes we do the process immediately (single page)
- * Sometimes we start a batch early (re-save an existing node)
- * Sometimes we have to wait till after (save new node) and start a batch then.
- * - this might be reduced to two cases, but not sure..
- */
-function pdf_to_imagefield_nodeapi_OLD(&$node, $op, $a3 = NULL, $a4 = NULL) {
-  // TODO Remaining code in this function needs to be moved to the appropriate new hook function.
-  // First check if this node has one of our widgets active.
-  $source_filefield_def = pdf_to_imagefield_source_filefield($node);
-  if (!$source_filefield_def) {
-    return;
-  } // /switch
-}
 
 /**
  * hook_node_presave() nodapi subroutine
@@ -537,17 +498,21 @@ function pdf_to_imagefield_element_info() {
 /**
  * Declare that this module provides a new widget for handling filefields.
  *
- * Implements hook_widget_info().
+ * Implements hook_field_widget_info().
  */
-function pdf_to_imagefield_widget_info() {
+function pdf_to_imagefield_field_widget_info() {
   $module_path = drupal_get_path('module', 'pdf_to_imagefield');
   return array(
     'pdf_to_imagefield_widget' => array(
       'label' => t('PDF to ImageField'),
-      'field types' => array('filefield'),
-      'multiple values' => CONTENT_HANDLE_CORE,
-      'callbacks' => array('default value' => CONTENT_CALLBACK_CUSTOM),
-      'description' => t('An edit widget for pdf files, including functionality to convert pdf pages to ImageField files.'),
+      'field types' => array('file'),
+      'settings' => array(
+        'progress_indicator' => 'throbber',
+      ),
+  		'behaviors' => array(
+        'multiple values' => FIELD_BEHAVIOR_CUSTOM,
+        'default value' => FIELD_BEHAVIOR_NONE,
+      ),
     ),
   );
 }
@@ -566,9 +531,9 @@ function pdf_to_imagefield_widget(&$form, &$form_state, $field, $items, $delta =
 /**
  * Declare what happens when someone uses our widget
  *
- * Implements hook_widget_settings().
+ * Implements hook_field_widget_settings().
  */
-function pdf_to_imagefield_widget_settings($op, $widget) {
+function xxpdf_to_imagefield_field_widget_settings_form($op, $widget) {
   switch ($op) {
     case 'form':
       return pdf_to_imagefield_widget_settings_form($widget);
@@ -587,29 +552,35 @@ function pdf_to_imagefield_widget_settings($op, $widget) {
 /**
  * Implements hook_widget_settings($op = 'form')().
  */
-function pdf_to_imagefield_widget_settings_form($widget) {
+function pdf_to_imagefield_field_widget_settings_form($widget) {
   if (!pdf_to_imagefield_check_imagemagick($widget)) {
     drupal_set_message(t('ImageMagick test pdf to image conversion failed. Please check your system ImageMagick and/or Ghostscript configuration. While you seeing this message, pdf files will be queued and stay unprocessed.'), 'error');
   }
-  // get standart settings from filefield
-  $form = module_invoke('filefield', 'widget_settings', 'form', $widget);
-  // set & lock pdf extension from modification
+
+  /* fails in d7
+  // Set & lock pdf extension from modification
   $form['file_extensions']['#default_value'] = 'pdf';
   $form['file_extensions']['#disabled'] = TRUE;
+  */
+  
   // create list of options to target form
   $imagefields = array();
-  $content_type = arg(3);
-  $filefields = filefield_get_field_list(arg(3));
-  foreach ($filefields as $key => $filefield) {
-    if ($filefield['widget']['module'] == 'imagefield') {
-      $imagefields[$key] = $filefield['widget']['label'] . ' (' . $filefield['field_name'] . ')';
+  // This is horrid, why doesn't the widget know what content type we are dealing with?
+  $content_type = arg(4);
+  
+  $available_fields = field_info_instances('node', $content_type);
+  foreach ($available_fields as $key => $filefield) {
+    if ($filefield['widget']['type'] == 'image_image') {
+      $imagefields[$key] = $filefield['label'] . ' (' . $filefield['field_name'] . ')';
     }
   }
+  
   // just 4fun
   $imagefields[0] = count($imagefields)
     ? t('No ImageField selected')
     : t('No ImageField found');
-  // target form
+
+  // Target form
   $form['target_imagefield'] = array(
     '#type' => 'select',
     '#title' => t('Target ImageField'),
@@ -629,17 +600,18 @@ function pdf_to_imagefield_widget_settings_form($widget) {
   $form['extra_args'] = array(
     '#type' => 'textfield',
     '#title' => t('Extra conversion arguments'),
-    '#description' => t('Enter optional <a href="http://imagemagick.org/Usage/formats/#ps">additional parameters to be used by the imagemagick conversion</a> if needed.<br/>eg <code>-trim +repage<code>'),
+    '#description' => t('Enter optional <a href="http://imagemagick.org/Usage/formats/#ps">additional parameters to be used by the imagemagick conversion</a> if needed.<br/>eg <code>-trim +repage</code>'),
     '#default_value' => !empty($widget['extra_args']) ? $widget['extra_args'] : '',
     '#size' => 20,
   );
+  dpm(get_defined_vars());
   return $form;
 }
 
 /**
  * Implements hook_widget_settings($op = 'validate')().
  */
-function pdf_to_imagefield_widget_settings_validate($widget) {
+function pdf_to_imagefield_field_widget_settings_validate($widget) {
   // Check that set density is valid.
   if (!empty($widget['density']) && !preg_match('/^[0-9]+x[0-9]+$/', $widget['density'])) {
     form_set_error('density', t('Please specify a density in the format XxY (e.g. 120x120).'));
@@ -649,8 +621,9 @@ function pdf_to_imagefield_widget_settings_validate($widget) {
 /**
  * Implements hook_widget_settings($op = 'save')().
  */
-function pdf_to_imagefield_widget_settings_save($widget) {
+function pdf_to_imagefield_field_widget_settings_save($widget) {
   $filefield_settings = module_invoke('filefield', 'widget_settings', 'save', $widget);
+  dpm(get_defined_vars());
   return array_merge($filefield_settings, array('target_imagefield', 'density', 'extra_args'));
 }
 

@@ -6,39 +6,6 @@
  */
 
 /**
- * Implements hook_install().
- */
-function pdf_to_imagefield_install() {
-  drupal_load('module', 'content');
-  content_notify('install', 'pdf_to_imagefield');
-}
-
-/**
- * Implements hook_uninstall().
- */
-function pdf_to_imagefield_uninstall() {
-  drupal_load('module', 'content');
-  content_notify('uninstall', 'pdf_to_imagefield');
-}
-
-/**
- * Implements hook_enable().
- */
-function pdf_to_imagefield_enable() {
-  drupal_load('module', 'content');
-  content_notify('enable', 'pdf_to_imagefield');
-}
-
-/**
- * Implements hook_disable().
- */
-function pdf_to_imagefield_disable() {
-  drupal_load('module', 'content');
-  content_notify('disable', 'pdf_to_imagefield');
-}
-
-
-/**
  * Implements hook_requirements().
  *
  * Complain if the imagemagic path doesn't work
