@@ -1,6 +1,0 @@
-name = PDF to Imagefield
-description = Imports PDF file and split pages into ImageField files
-core = 7.x
-dependencies[] = image
-dependencies[] = imagemagick
-package = CCK
