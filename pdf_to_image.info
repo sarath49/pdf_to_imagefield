@@ -1,0 +1,4 @@
+name = PDF to Image
+description = Imports PDF file and split pages into image field files
+core = 7.x
+dependencies[] = imagemagick
