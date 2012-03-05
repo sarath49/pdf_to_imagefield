@@ -28,7 +28,7 @@ dependencies. You'l have to go to the ImageMagick forums for help with that.
 == Configuration ==
 
 - First, add an image field on your chosen content type. This is where the
-  generated images wil be stored.
+  generated images will be stored.
 - Set the allowed fields to 1 if you just want a cover page, direct number to
   store only some count of pages or 'unlimited' if you want all pages
   to be generated.
