@@ -2,204 +2,113 @@
 
 /**
  * @file
- * Implement a pdf field, based on the file module's file field.
+ *   Extends file fileds with a process that generates a thumbnail image
+ *   or multiple image pages from an uploaded PDF
  */
 
-
 /**
- * Implements hook_field_info().
- */
-function pdf_to_image_field_info() {
-  return array(
-    'pdf_to_image' => array(
-      'label'       => t('PDF'),
-      'description' => t('This field stores the ID of a pdf file as an integer value.'),
-      'settings'    => array(
-        'uri_scheme' => variable_get('file_default_scheme', 'public'),
-      ),
-      'instance_settings' => array(
-        'file_extensions' => 'pdf',
-        'file_directory'  => '',
-        'max_filesize'    => '',
-        'title_field'     => 0,
-        'hide_imagefield' => 1,
-        'target_field'    => NULL,
-        'density'         => '100x100',
-        'extra_args'      => '',
-      ),
-      'default_widget'    => 'pdf_to_image',
-      'default_formatter' => 'pdf_to_image',
-    ),
-  );
-}
-
-
-/**
- * Implements hook_field_settings_form().
- */
-function pdf_to_image_field_settings_form($field, $instance) {
-  $defaults = field_info_field_settings($field['type']);
-  $settings = array_merge($defaults, $field['settings']);
-
-  $scheme_options = array();
-  foreach (file_get_stream_wrappers(STREAM_WRAPPERS_WRITE_VISIBLE) as $scheme => $stream_wrapper) {
-    $scheme_options[$scheme] = $stream_wrapper['name'];
-  }
-  $form['uri_scheme'] = array(
-    '#type' => 'radios',
-    '#title' => t('Upload destination'),
-    '#options' => $scheme_options,
-    '#default_value' => $settings['uri_scheme'],
-    '#description' => t('Select where the final files should be stored. Private file storage has significantly more overhead than public files, but allows restricted access to files within this field.'),
-  );
-
-  // @TODO: find way for restrict cardinality of field only to 1.
-  return $form;
-}
-
-/**
- * Implements hook_field_instance_settings_form().
- */
-function pdf_to_image_field_instance_settings_form($field, $instance) {
-  $settings = $instance['settings'];
-
-  // Use the file field instance settings form as a basis.
-  $form = file_field_instance_settings_form($field, $instance);
-
-  $form['file_extensions']['#access'] = FALSE;
-  unset($form['description_field']);
-
-  $form['title_field'] = array(
-    '#type'          => 'checkbox',
-    '#title'         => t('Enable <em>Title</em> field'),
-    '#default_value' => $settings['title_field'],
-    '#description'   => t('The title attribute is used as a tooltip when the mouse hovers over the pdf.'),
-    '#weight'        => 11,
-  );
-
-  $form['hide_imagefield'] = array(
-    '#type'          => 'checkbox',
-    '#title'         => t('Hide target image field'),
-    '#default_value' => $settings['hide_imagefield'],
-    '#description'   => t('The title attribute is used as a tooltip when the mouse hovers over the pdf.'),
-    '#weight'        => 11,
-  );
-
-  return $form;
-}
-
-
-/**
- * Implements hook_field_load().
- */
-function pdf_to_image_field_load($entity_type, $entities, $field, $instances, $langcode, &$items, $age) {
-  file_field_load($entity_type, $entities, $field, $instances, $langcode, $items, $age);
-}
-
-
-/**
- * Implements hook_field_presave().
- */
-function pdf_to_image_field_presave($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  file_field_presave($entity_type, $entity, $field, $instance, $langcode, $items);
-  pdf_to_image_generate_process($entity_type, $entity, $field, $instance, $langcode, &$items);
-}
-
-
-/**
- * Implements hook_field_insert().
- */
-function pdf_to_image_field_insert($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  file_field_insert($entity_type, $entity, $field, $instance, $langcode, $items);
-}
-
-
-/**
- * Implements hook_field_update().
- */
-function pdf_to_image_field_update($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  file_field_update($entity_type, $entity, $field, $instance, $langcode, $items);
-}
-
-
-/**
- * Implements hook_field_delete().
- */
-function pdf_to_image_field_delete($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  file_field_delete($entity_type, $entity, $field, $instance, $langcode, $items);
-}
-
-
-/**
- * Implements hook_field_delete_revision().
- */
-function pdf_to_image_field_delete_revision($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  file_field_delete_revision($entity_type, $entity, $field, $instance, $langcode, $items);
-}
-
-
-/**
- * Implements hook_field_is_empty().
- */
-function pdf_to_image_field_is_empty($item, $field) {
-  return file_field_is_empty($item, $field);
-}
-
-
-/**
+ * Announces that we have additional widget options that extend file fields.
+ *
+ * @see file_field_widget_info()
+ *
  * Implements hook_field_widget_info().
  */
 function pdf_to_image_field_widget_info() {
   return array(
     'pdf_to_image' => array(
       'label'       => t('PDF to Image'),
-      'field types' => array('pdf_to_image'),
+      'field types' => array('file'),
       'settings'    => array(
-        'progress_indicator'  => 'throbber',
-        'target_field'        => NULL,
-        'density'             => '100x100',
-        'extra_args'          => '',
+        'pdf_to_image' => array(
+          'target_field'        => NULL,
+          'density'             => '100x100',
+          'extra_args'          => '',
+        ),
       ),
       'behaviors'   => array(
         'multiple values' => FIELD_BEHAVIOR_CUSTOM,
-        'default value'   => FIELD_BEHAVIOR_NONE,
+        'default value' => FIELD_BEHAVIOR_NONE,
       ),
     ),
   );
 }
 
 
+#function pdf_to_image_form_alter($form, $form_state, $form_id) {
+#  dpm(get_defined_vars());
+#}
+
 /**
+ * Tell field API that we want it to save some extra settings.
+ *
+ * remove - data is in the widget settings
+ */
+function xxpdf_to_image_field_info_alter(&$info) {
+  dpm(__FUNCTION__);
+  if (isset($info['file'])) {
+    $info['file']['settings'] += array(
+      'target_field' => NULL,
+      'density' => '100x100',
+      'extra_args' => '',
+      'hide_imagefield' => FALSE,
+    );
+  }
+}
+
+
+/**
+ * Adds extra options to file upload widget when the field is editable
+ *
  * Implements hook_field_widget_form().
  */
 function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
-  // Add display_field setting to field,
-  // file_field_widget_form() assumes it is set.
-  $field['settings']['display_field'] = 0;
+  dpm(__FUNCTION__);
 
+  // This is a file widget, plus extra options.
   $elements = file_field_widget_form($form, $form_state, $field, $instance, $langcode, $items, $delta, $element);
   $settings = $instance['settings'];
 
   foreach (element_children($elements) as $delta) {
     // If not using custom extension validation, ensure this is a pdf.
     $elements[$delta]['#upload_validators']['file_validate_extensions'][0] = 'pdf';
-    // Add all extra functionality provided by the image widget.
-    $elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
+    // File fields need extra processing. Our one even more so.
+    #$elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
   }
+  $elements[0]['#description'] .= '<br/>' . t('This file will produce an image thumbnail and store it in %target_field when uploaded', array('%target_field' => $instance['widget']['settings']['pdf_to_image']['target_field']));
+
+  // When a file field is being submitted, the actual save of the file happens
+  // in file_managed_file_value -> file_managed_file_save_upload
+  // We rely on file_managed_file_submit , file_field_widget_submit, to have run.
+  // We want to add a process that happens after that.
+  // That's too deep.
+  // run our process as part of the form submit. This shoul mean the element upload has already finished.
+  #dpm($form);
+  $form['#submit'][] = 'pdf_to_image_form_submit';
+  // Need to make a note on the form of what it is to process, as it will forget otherwise
+  $form['#pdf_to_image'][] = $instance['field_name'];
+  // pdf_to_image_form_submit will pick this note up
 
   return $elements;
 }
 
 
 /**
+ * Adds options to the field configuratin form in the content type admin setup.
+ *
  * Implements hook_field_widget_settings_form().
  */
 function pdf_to_image_field_widget_settings_form($field, $instance) {
   $widget = $instance['widget'];
-  $settings = $widget['settings'];
+  $pdf_to_image_settings = $widget['settings']['pdf_to_image'];
 
   // Use the file widget settings form.
   $form = file_field_widget_settings_form($field, $instance);
+
+  // Plus our own extras
+  $form['pdf_to_image'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('PDF conversion options'),
+  );
 
   $fields = field_info_instances($instance['entity_type'], $instance['bundle']);
   $options = array();
@@ -210,38 +119,42 @@ function pdf_to_image_field_widget_settings_form($field, $instance) {
   }
 
   // @TODO: make this field required.
-  $form['target_field'] = array(
+  $form['pdf_to_image']['target_field'] = array(
     '#title'         => t('Target Image Field'),
     '#type'          => 'select',
     '#empty_option'  => '<' . (count($options) ? t('No Image Field selected') : t('No Image Field found')) . '>',
-    '#default_value' => $settings['target_field'],
+    '#default_value' => $pdf_to_image_settings['target_field'],
     '#description'   => t('PDF to Image field processing requires an image field where the resulting images of extracted PDF pages should be stored. The image field must be assigned to the same node type. For all pages to be processed, the image field should allow multiple uploads. If the image field allows only one item, only the cover page will be processed.'),
-    '#weight'        => 15,
     '#options'       => $options,
   );
 
-  $form['density'] = array(
+  $form['pdf_to_image']['density'] = array(
     '#title'            => t('Density used for rendering PDF'),
     '#description'      => t('Horizontal and vertical density of the image XxY (e.g. 120x120). Default is 100x100.'),
     '#type'             => 'textfield',
-    '#default_value'    => $settings['density'],
+    '#default_value'    => $pdf_to_image_settings['density'],
     '#element_validate' => array('pdf_to_image_validate_density'),
     '#size'             => 15,
     '#maxlength'        => 10,
-    '#weight'           => 16,
   );
 
-  $form['extra_args'] = array(
+  $form['pdf_to_image']['extra_args'] = array(
     '#title'         => t('Extra conversion arguments'),
     '#type'          => 'textfield',
     '#description'   => t('Enter optional <a href="http://imagemagick.org/Usage/formats/#ps">additional parameters to be used by the imagemagick conversion</a> if needed.<br/>eg <code>-trim +repage</code>'),
-    '#default_value' => !empty($widget['extra_args']) ? $widget['extra_args'] : '',
+    '#default_value' => !empty($pdf_to_image_settings['extra_args']) ? $pdf_to_image_settings['extra_args'] : '',
     '#size'          => 20,
-    '#weight'        => 17,
   );
 
   // @TODO: implement this.
-  $form['extra_args']['#description'] .= '<br />' . t('WARNING! not working feature now.');
+  $form['pdf_to_image']['extra_args']['#description'] .= '<br />' . t('WARNING! not working feature now.');
+
+  $form['pdf_to_image']['hide_imagefield'] = array(
+    '#type'          => 'checkbox',
+    '#title'         => t('Hide target image field on edit form'),
+    '#default_value' => !empty($pdf_to_image_settings['hide_imagefield']),
+    '#description'   => t('If rendering the preview image in place of the uploaded file, you may want to hide the image field from the edit form entirely to prevent editors from adding their own.'),
+  );
 
   // @TODO: add radiobuttons to choose way of pages generating,
   // means batch (be default now) or queue or runtime,
@@ -251,7 +164,7 @@ function pdf_to_image_field_widget_settings_form($field, $instance) {
 
 
 /**
- * validate string for destiny settings
+ * Validate string for density settings.
  */
 function pdf_to_image_validate_density($element, &$form_state) {
   $value = $element['#value'];
@@ -261,101 +174,24 @@ function pdf_to_image_validate_density($element, &$form_state) {
 }
 
 
+
 /**
- * An element #process callback for the image_image field type.
+ * Adds another method for displaying PDF files - embedded live preview.
  *
- * Expands the pdf_to_image type to include the title field.
- */
-function pdf_to_image_field_widget_process($element, &$form_state, $form) {
-  $item = $element['#value'];
-  $item['fid'] = $element['fid']['#value'];
-
-  $instance = field_widget_instance($element, $form_state);
-
-  $settings = $instance['settings'];
-  $widget_settings = $instance['widget']['settings'];
-
-  // Add the additional alt and title fields.
-  $element['title'] = array(
-    '#type'          => 'textfield',
-    '#title'         => t('Title'),
-    '#default_value' => isset($item['title']) ? $item['title'] : '',
-    '#description'   => t('The title is used as a tool tip when the user hovers the mouse over the file.'),
-    '#maxlength'     => 256,
-    '#weight'        => -1,
-    '#access'        => (bool) $item['fid'] && $settings['title_field'],
-  );
-
-  return $element;
-}
-
-
-/**
  * Implements hook_field_formatter_info().
  */
 function pdf_to_image_field_formatter_info() {
   $formatters = array(
     'pdf_view' => array(
-      'label'       => t('PDF view'),
-      'field types' => array('pdf_to_image'/*, 'file'*/),
+      'label'       => t('PDF preview'),
+      'field types' => array('file'),
       'settings'    => array(
         'pdf_width'  => '100%',
         'pdf_height' => '450',
-        'pdf_alt'    => t('Download PDF file'),
       ),
     ),
-    'pdf_link' => array(
-      'label'       => t('PDF link'),
-      'field types' => array('pdf_to_image'),
-      'settings'    => array(),
-    ),
   );
-
   return $formatters;
-}
-
-
-/**
- * Implements hook_field_formatter_info_alter().
- */
-function pdf_to_image_field_formatter_info_alter(&$info) {
-  $info['file_default']['field types'][] = 'pdf_to_image';
-  $info['file_table']['field types'][] = 'pdf_to_image';
-  $info['file_url_plain']['field types'][] = 'pdf_to_image';
-}
-
-
-/**
- * Implements hook_field_formatter_settings_form().
- */
-function pdf_to_image_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
-  $display = $instance['display'][$view_mode];
-  $settings = $display['settings'];
-  if ($display['type'] == 'pdf_view') {
-    $element = array();
-    $element['pdf_width'] = array(
-      '#type'           => 'textfield',
-      '#title'          => t('Object width'),
-      '#description'    => t('Specify the width of the field to display a pdf file (use % or px)'),
-      '#default_value'  => $settings['pdf_width'],
-      '#required'       => TRUE,
-    );
-    $element['pdf_height'] = array(
-      '#type'           => 'textfield',
-      '#title'          => t('Object height'),
-      '#description'    => t('Specify the height of the field to display a pdf file (use % or px)'),
-      '#default_value'  => $settings['pdf_height'],
-      '#required'       => TRUE,
-    );
-    $element['pdf_alt'] = array(
-      '#type'           => 'textfield',
-      '#title'          => t('Text for download'),
-      '#description'    => t('Specify the text that will appear to download the file'),
-      '#default_value'  => $settings['pdf_alt'],
-      '#required'       => TRUE,
-    );
-  }
-  return $element;
 }
 
 
@@ -363,6 +199,7 @@ function pdf_to_image_field_formatter_settings_form($field, $instance, $view_mod
  * Implements hook_field_formatter_settings_summary().
  */
 function pdf_to_image_field_formatter_settings_summary($field, $instance, $view_mode) {
+  dpm(__FUNCTION__);
   $display  = $instance['display'][$view_mode];
   $settings = $display['settings'];
   if ($display['type'] == 'pdf_view') {
@@ -380,6 +217,7 @@ function pdf_to_image_field_formatter_settings_summary($field, $instance, $view_
  * Implements hook_field_formatter_view().
  */
 function pdf_to_image_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  dpm(__FUNCTION__);
   if (!isset($items[0])) {
     return;
   }
@@ -408,24 +246,32 @@ function pdf_to_image_field_formatter_view($entity_type, $entity, $field, $insta
 
 
 /**
- * Implements hook_field_formatter_view().
+ * Implements hook_form_alter().
+ *
+ * Hides the target image field from editors, if you don't want them to provide
+ * their own snapshot.
+ *
+ * Should be able to run on any fielded entity type edit form, not just nodes.
  */
 function pdf_to_image_form_alter(&$form, &$form_state, $form_id) {
-  if (isset($form['#node']) && $form['#node']->type . '_node_form' == $form_id) {
-    $fields = field_info_instances($form['#entity_type'], $form['#bundle']);
-    $fields_pdf = array();
-    foreach ((array) $fields as $field) {
-      if ($field['widget']['type'] == 'pdf_to_image') {
-        $fields_pdf[$field['field_name']] = $field;
-      }
+  if (!isset($form['#entity_type']) || !isset($form['#bundle'])) {
+    return;
+  }
+
+  // Find if this entity has any fields that use the pdf_to_image widget.
+  $fields = field_info_instances($form['#entity_type'], $form['#bundle']);
+  $fields_pdf = array();
+  foreach ((array) $fields as $field) {
+    if ($field['widget']['type'] == 'pdf_to_image') {
+      $fields_pdf[$field['field_name']] = $field;
     }
-    if (count($fields_pdf)) {
-      foreach ($fields_pdf as $field) {
-        if ($field['settings']['hide_imagefield']) {
-          $target_field = $field['widget']['settings']['target_field'];
-          if (isset($form[$target_field])) {
-            $form[$target_field]['#access'] = FALSE;
-          }
+  }
+  if (count($fields_pdf)) {
+    foreach ($fields_pdf as $field) {
+      if ($field['widget']['settings']['pdf_to_image']['hide_imagefield']) {
+        $target_field = $field['widget']['settings']['pdf_to_image']['target_field'];
+        if (isset($form[$target_field])) {
+          $form[$target_field]['#access'] = FALSE;
         }
       }
     }
@@ -433,52 +279,107 @@ function pdf_to_image_form_alter(&$form, &$form_state, $form_id) {
 }
 
 
+
+/**
+ * A field widget process callback, triggered when a form containing our widget type
+ * of file is geting rendered.
+ *
+ * @see file_field_widget_process.
+ */
+function pdf_to_image_field_widget_process($element, &$form_state, $form) {
+  /*
+  $item = $element['#value'];
+  $item['fid'] = $element['fid']['#value'];
+
+  $field = field_widget_field($element, $form_state);
+  $instance = field_widget_instance($element, $form_state);
+  $settings = $instance['widget']['settings'];
+
+  dpm('could show a thumbnail here');
+  */
+  return $element;
+}
+
+
+/**
+ * Process our extra actions when a form containing a special file field has
+ * been submitted.
+ * This is the first step where generation really starts happening.
+ *
+ * @param array $form
+ * @param array $form_state
+ */
+function pdf_to_image_form_submit($form, &$form_state) {
+  $entity_type = $form['#entity_type'];
+  $bundle = $form['#bundle'];
+  // The field widget should have made a note of the field we need to process
+  // in the custom $form['#pdf_to_image'] parameter.
+  foreach ($form['#pdf_to_image'] as $field_id) {
+    $field = field_info_field($field_id);
+    $instance = field_info_instance($entity_type, $field_id, $bundle);
+    $items = $form_state['values'][$field_id];
+    $langcode = $form_state['values']['language'];
+    pdf_to_image_generate_process($entity_type, $form['#entity'], $field_id, $instance, $langcode, $items);
+  }
+}
+
 /**
  * Processing pdf file creation.
+ *
+ * This sets up the batch job with all the neccessary parameters
  */
 function pdf_to_image_generate_process($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  if (!empty($items[0]['fid'])) {
-    $pdf_file = file_load($items[0]['fid']);
-    $pdf_realpath = file_stream_wrapper_get_instance_by_uri($pdf_file->uri)->realpath();
-    $count = pdf_to_image_count_pages($pdf_realpath);
-    if (!empty($instance['widget']['settings']['target_field']) && $count) {
-      $params = array(
-        'entity' => $entity,
-        'image'  => array(
-          'field'    => field_info_field($instance['widget']['settings']['target_field']),
-          'instance' => field_info_instance($entity_type, $instance['widget']['settings']['target_field'], $instance['bundle']),
-        ),
-        'pdf'    => array(
-          'field'    => $field,
-          'instance' => $instance,
-          'file'     => $pdf_file,
-        ),
-      );
+  dpm(__FUNCTION__);
+  if (empty($items[$langcode][0]['fid'])) {
+    return;
+  }
+  $pdf_file = file_load($items[$langcode][0]['fid']);
+  $pdf_realpath = file_stream_wrapper_get_instance_by_uri($pdf_file->uri)->realpath();
+  $count = pdf_to_image_count_pages($pdf_realpath);
+  if (!empty($instance['widget']['settings']['pdf_to_image']['target_field'])) {
+    $target_field = $instance['widget']['settings']['pdf_to_image']['target_field'];
+  }
+  if ($target_field && $count) {
+    $params = array(
+      'entity' => $entity,
+      'image'  => array(
+        'field'    => field_info_field($target_field),
+        'instance' => field_info_instance($entity_type, $target_field, $instance['bundle']),
+      ),
+      'pdf'    => array(
+        'field'    => $field,
+        'instance' => $instance,
+        'file'     => $pdf_file,
+      ),
+    );
 
-      // Prepare count parametr.
-      if ($params['image']['field']['cardinality'] != -1 && $count > $params['image']['field']['cardinality']) {
-        $count = $params['image']['field']['cardinality'];
-      }
-      $operations = array(
-        array('pdf_to_image_generate_process_page', array($params, 0)),
-      );
-
-      if ($count > 0) {
-        for ($page = 1; $page < $count; $page++) {
-          $operations[] = array('pdf_to_image_generate_process_page', array($params, $page));
-        }
-        batch_set(array(
-          'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
-          'operations'       => $operations,
-          'finished'         => 'pdf_to_image_generate_process_attach',
-          'progress_message' => t('Processed @current out of @total.'),
-        ));
-      }
-      // @TODO: save node with one entity without batch.
-      // else {
-      // $file = pdf_to_image_generate_page($params, 0);
-      // }
+    // Prepare count parametr.
+    if ($params['image']['field']['cardinality'] != -1 && $count > $params['image']['field']['cardinality']) {
+      $count = $params['image']['field']['cardinality'];
     }
+    $operations = array(
+      array('pdf_to_image_generate_process_page', array($params, 0)),
+    );
+
+    if ($count > 0) {
+      watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
+      for ($page = 1; $page < $count; $page++) {
+        $operations[] = array('pdf_to_image_generate_process_page', array($params, $page));
+      }
+      batch_set(array(
+        'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
+        'operations'       => $operations,
+        'finished'         => 'pdf_to_image_generate_process_attach',
+        'progress_message' => t('Processed @current out of @total.'),
+      ));
+    }
+    // @TODO: save node with one entity without batch.
+    // else {
+    // $file = pdf_to_image_generate_page($params, 0);
+    // }
+  }
+  else {
+    // No target image field set, or invalid count from the PDF.
   }
 }
 
@@ -499,10 +400,11 @@ function pdf_to_image_generate_process_page($params, $page_number, &$context) {
 
 
 /**
- * Attach generated files to node in batch node.
+ * Attach generated files to node at the end of batch mode.
  */
 function pdf_to_image_generate_process_attach($success, $results, $operations) {
   if (!(isset($results['files']) && count($results['files']))) {
+    watchdog('pdf_to_image', 'No files produced from processing document', array(), WATCHDOG_NOTICE);
     return;
   }
 
@@ -520,6 +422,12 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
       }
       node_save($node);
     }
+    else {
+      watchdog('pdf_to_image', 'Invalid node object. Cannot attache generated images to it.', array(), WATCHDOG_ERROR);
+    }
+  }
+  else {
+    watchdog('pdf_to_image', 'Invalid node id given to attach generated images to.', array(), WATCHDOG_ERROR);
   }
 }
 
@@ -530,23 +438,31 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
 function pdf_to_image_generate_page($params, $page_number = 0) {
   $source_file = file_stream_wrapper_get_instance_by_uri($params['pdf']['file']->uri)->realpath();
   if (!file_exists($source_file)) {
+    watchdog('pdf_to_image', 'Invalid file given to convert. Could not read %file', array('%file' => $params['pdf']['file']->uri), WATCHDOG_ERROR);
     return NULL;
   }
 
-  // Add density arguments, preg_replace using for security.
-  $density_x = preg_replace('/^([0-9]+)x[0-9]+$/', '\1', $params['pdf']['instance']['widget']['settings']['density']);
-  $density_y = preg_replace('/^[0-9]+x([0-9]+)$/', '\1', $params['pdf']['instance']['widget']['settings']['density']);
-  $density = "-density {$density_x}x{$density_y}";
+  $density = "-density " . $params['pdf']['instance']['widget']['settings']['pdf_to_image']['density'];
 
   $image_dir = file_stream_wrapper_get_instance_by_scheme($params['image']['field']['settings']['uri_scheme'])->realpath();
-  $image_filename = $params['image']['instance']['settings']['file_directory'] . '/' . $params['pdf']['file']->fid . "-{$density_x}x{$density_y}-" . $page_number . '.jpg';
+  $image_filename = $params['image']['instance']['settings']['file_directory'] . '/' . $params['pdf']['file']->fid . "-" . $page_number . '.jpg';
   $image_realpath = $image_dir . '/' . $image_filename;
   $image_uri = file_stream_wrapper_uri_normalize($params['image']['field']['settings']['uri_scheme'] . '://' . $image_filename);
 
+  watchdog('pdf_to_image', 'Converting PDF: %file page %page_number: to image: %image', array(
+      '%file' => $params['pdf']['file']->uri,
+      '%page_number' => $page_number,
+      '%image' => $image_uri,
+    ), WATCHDOG_INFO
+  );
+
   if (empty($image_uri)) {
+    watchdog('pdf_to_image', 'Failed to calculate a destination filename for conversion', array(), WATCHDOG_ERROR);
     return FALSE;
   }
 
+  // Check to see if the target image file already exists, is registered in the
+  // database. Why?
   $query = db_select('file_managed', 'f')
     ->fields('f', array('fid'))
     ->condition('uri', $image_uri)
@@ -556,9 +472,14 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
     return $file;
   }
 
-  pdf_to_image_exec($source_file . '[' . $page_number . ']', $image_realpath, array(), array($density));
+  pdf_to_image_convert_exec($source_file . '[' . $page_number . ']', $image_realpath, array(), array($density));
 
   if (file_exists($image_realpath)) {
+    watchdog('pdf_to_image', 'PDF preview %image created', array(
+        '%image' => $image_uri,
+      ), WATCHDOG_INFO
+    );
+
     global $user;
     $file = (object) array(
       'uid'       => $user->uid,
@@ -573,6 +494,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
     file_save($file);
     return $file;
   }
+  watchdog('pdf_to_image', 'Failed to generate image', array(), WATCHDOG_ERROR);
   return FALSE;
 }
 
@@ -590,22 +512,68 @@ function pdf_to_image_count_pages($filepath) {
   // "{$identify_path} -format %n " . escapeshellarg($fpath) . ' 2> /dev/null';
   $command = "{$identify_path} " . escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
 
-  $count = shell_exec($command);
-  return (int) $count;
+  $count = pdf_to_image_shell_exec($command);
+  return (int) trim($count);
+}
+
+/**
+ * Check the binary path on the server.
+ */
+function pdf_to_image_check_imagemagick() {
+  $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
+  $response = pdf_to_image_shell_exec($convert_path . ' -version');
+  return $response;
 }
 
 
 /**
- * Convert a PDF to an image, using ImageAPI.
+ * FWIW, may not need imagemagick module, just for this one func.
+ * If you want debugging and Win32 support, use imagemagick.module.
+ * Otherwise, here's a short and dirty version of the same thing.
+ *
  */
-function pdf_to_image_exec($source, $dest, $args = array(), $extra = array()) {
-  $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
+function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = array()) {
   $args['quality'] = '-quality ' . escapeshellarg(variable_get('imagemagick_quality', 75));
   $command = implode(' ', $extra) . ' ' . escapeshellarg($source) . ' ' . implode(' ', $args) . ' ' . escapeshellarg($dest);
-  if (_imagemagick_convert_exec($command, $output, $errors) !== TRUE) {
-    $errors_txt = '<pre>' . (is_array($errors) ? implode("\n", $errors) : $errors) . '</pre>';
-    watchdog('pdf to image: imageapi imagemagick', '!errors', array('!errors' => $errors_txt), WATCHDOG_ERROR);
-    return FALSE;
+
+  if (function_exists('_imagemagick_convert_exec')) {
+    if (_imagemagick_convert_exec($command, $output, $errors) !== TRUE) {
+      $errors_txt = '<pre>' . (is_array($errors) ? implode("\n", $errors) : $errors) . '</pre>';
+      watchdog('pdf to image : imageapi imagemagick', $errors_txt, array(), WATCHDOG_ERROR);
+      return FALSE;
+    }
+    return file_exists($dest);
   }
+
+  // else do it myself
+
+  $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
+  $response = pdf_to_image_shell_exec($convert_path . ' ' . $command);
   return file_exists($dest);
+}
+
+/**
+ * Run the given command (expected to be an imageMagick Commandline)
+ * Wrapped in a bugfix workaround.
+ *
+ * @param unknown_type $command
+ */
+function pdf_to_image_shell_exec($command) {
+  // Horrible bug. If running on Acquia dev desktop, it sets a custom path for
+  // the dynamic link library. But 2012-04 that was OLDER than the libraries
+  // My OS expected to use to run graphics utilities with.
+  // Reason: Incompatible library version: dot requires version 10.0.0 or later, but libltdl.7.dylib provides version 9.0.0
+  // UNSET the Acquia DYLD_LIBRARY_PATH before dropping to commandline to run.
+  $DYLD_LIBRARY_PATH = getenv("DYLD_LIBRARY_PATH");
+  putenv("DYLD_LIBRARY_PATH=");
+
+  dpm($command);
+  watchdog('pdf_to_image', 'Running commandline %command', array('%command' => $command), WATCHDOG_DEBUG);
+
+  $response = shell_exec($command);
+
+  // Put it back just in case it matters
+  putenv("DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH");
+
+  return $response;
 }
