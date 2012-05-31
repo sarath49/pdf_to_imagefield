@@ -2,7 +2,7 @@
 
 /**
  * @file
- *   Extends file fileds with a process that generates a thumbnail image
+ *   Extends file fields with a process that generates a thumbnail image
  *   or multiple image pages from an uploaded PDF
  */
 
@@ -34,66 +34,8 @@ function pdf_to_image_field_widget_info() {
 }
 
 
-#function pdf_to_image_form_alter($form, $form_state, $form_id) {
-#  dpm(get_defined_vars());
-#}
-
 /**
- * Tell field API that we want it to save some extra settings.
- *
- * remove - data is in the widget settings
- */
-function xxpdf_to_image_field_info_alter(&$info) {
-  dpm(__FUNCTION__);
-  if (isset($info['file'])) {
-    $info['file']['settings'] += array(
-      'target_field' => NULL,
-      'density' => '100x100',
-      'extra_args' => '',
-      'hide_imagefield' => FALSE,
-    );
-  }
-}
-
-
-/**
- * Adds extra options to file upload widget when the field is editable
- *
- * Implements hook_field_widget_form().
- */
-function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
-  dpm(__FUNCTION__);
-
-  // This is a file widget, plus extra options.
-  $elements = file_field_widget_form($form, $form_state, $field, $instance, $langcode, $items, $delta, $element);
-  $settings = $instance['settings'];
-
-  foreach (element_children($elements) as $delta) {
-    // If not using custom extension validation, ensure this is a pdf.
-    $elements[$delta]['#upload_validators']['file_validate_extensions'][0] = 'pdf';
-    // File fields need extra processing. Our one even more so.
-    #$elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
-  }
-  $elements[0]['#description'] .= '<br/>' . t('This file will produce an image thumbnail and store it in %target_field when uploaded', array('%target_field' => $instance['widget']['settings']['pdf_to_image']['target_field']));
-
-  // When a file field is being submitted, the actual save of the file happens
-  // in file_managed_file_value -> file_managed_file_save_upload
-  // We rely on file_managed_file_submit , file_field_widget_submit, to have run.
-  // We want to add a process that happens after that.
-  // That's too deep.
-  // run our process as part of the form submit. This shoul mean the element upload has already finished.
-  #dpm($form);
-  $form['#submit'][] = 'pdf_to_image_form_submit';
-  // Need to make a note on the form of what it is to process, as it will forget otherwise
-  $form['#pdf_to_image'][] = $instance['field_name'];
-  // pdf_to_image_form_submit will pick this note up
-
-  return $elements;
-}
-
-
-/**
- * Adds options to the field configuratin form in the content type admin setup.
+ * Adds options to the field configuration form in the content type admin setup.
  *
  * Implements hook_field_widget_settings_form().
  */
@@ -279,6 +221,43 @@ function pdf_to_image_form_alter(&$form, &$form_state, $form_id) {
 }
 
 
+/**
+ * Adds extra options to file upload widget.
+ *
+ * It's basically a stub around file_field_widget_form().
+ *
+ * Implements hook_field_widget_form().
+ */
+function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+
+  // This is a file widget, plus extra options.
+  $elements = file_field_widget_form($form, $form_state, $field, $instance, $langcode, $items, $delta, $element);
+  $settings = $instance['settings'];
+
+  foreach (element_children($elements) as $delta) {
+    // If not using custom extension validation, ensure this is a pdf.
+    $elements[$delta]['#upload_validators']['file_validate_extensions'][0] = 'pdf';
+    // File fields need extra processing. Our one even more so.
+    #$elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
+  }
+  $elements[0]['#description'] .= '<br/>' . t('This file will produce an image thumbnail and store it in %target_field when uploaded', array('%target_field' => $instance['widget']['settings']['pdf_to_image']['target_field']));
+
+  // When a file field is being submitted, the actual save of the file happens
+  // in file_managed_file_value -> file_managed_file_save_upload etc.
+  // We rely on the actual upload ans save to have happened there.
+  // We want to add a process that happens after that.
+  // It's too deep to capture that process, so wait until it's done,
+  // and then do our thing.
+  // We therefore run our process as part of the form submit.
+  // This should mean the element upload has already finished.
+  $form['#submit'][] = 'pdf_to_image_form_submit';
+  // Need to make a note on the form of what it is to process, as it will forget otherwise
+  $form['#pdf_to_image'][] = $instance['field_name'];
+  // pdf_to_image_form_submit() will pick this note up and use it later.
+
+  return $elements;
+}
+
 
 /**
  * A field widget process callback, triggered when a form containing our widget type
@@ -329,7 +308,6 @@ function pdf_to_image_form_submit($form, &$form_state) {
  * This sets up the batch job with all the neccessary parameters
  */
 function pdf_to_image_generate_process($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  dpm(__FUNCTION__);
   if (empty($items[$langcode][0]['fid'])) {
     return;
   }
@@ -340,6 +318,7 @@ function pdf_to_image_generate_process($entity_type, $entity, $field, $instance,
     $target_field = $instance['widget']['settings']['pdf_to_image']['target_field'];
   }
   if ($target_field && $count) {
+    // Arguments to give to the batch job.
     $params = array(
       'entity' => $entity,
       'image'  => array(
@@ -385,7 +364,7 @@ function pdf_to_image_generate_process($entity_type, $entity, $field, $instance,
 
 
 /**
- * Generate a single page in batch process.
+ * Generate a single page (of the given index) inside a batch process.
  */
 function pdf_to_image_generate_process_page($params, $page_number, &$context) {
   $context['results']['params'] = $params;
@@ -395,39 +374,6 @@ function pdf_to_image_generate_process_page($params, $page_number, &$context) {
   $file = pdf_to_image_generate_page($params, $page_number);
   if (is_object($file) && isset($file->fid)) {
     $context['results']['files'][$page_number] = $file;
-  }
-}
-
-
-/**
- * Attach generated files to node at the end of batch mode.
- */
-function pdf_to_image_generate_process_attach($success, $results, $operations) {
-  if (!(isset($results['files']) && count($results['files']))) {
-    watchdog('pdf_to_image', 'No files produced from processing document', array(), WATCHDOG_NOTICE);
-    return;
-  }
-
-  $field_name = $results['params']['image']['field']['field_name'];
-  $nid = $results['params']['entity']->nid;
-
-  if (isset($nid) && is_numeric($nid)) {
-    $node = node_load($nid);
-    if (is_object($node)) {
-      $field_lang = field_language('node', $node, $field_name);
-      $node->{$field_name}[$field_lang] = array();
-      ksort($results['files'], SORT_NUMERIC);
-      foreach ($results['files'] as $file) {
-        $node->{$field_name}[$field_lang][]['fid'] = $file->fid;
-      }
-      node_save($node);
-    }
-    else {
-      watchdog('pdf_to_image', 'Invalid node object. Cannot attache generated images to it.', array(), WATCHDOG_ERROR);
-    }
-  }
-  else {
-    watchdog('pdf_to_image', 'Invalid node id given to attach generated images to.', array(), WATCHDOG_ERROR);
   }
 }
 
@@ -500,9 +446,44 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
 
 
 /**
+ * Attach generated files to node at the end of batch mode.
+ */
+function pdf_to_image_generate_process_attach($success, $results, $operations) {
+  if (!(isset($results['files']) && count($results['files']))) {
+    watchdog('pdf_to_image', 'No files produced from processing document', array(), WATCHDOG_NOTICE);
+    return;
+  }
+
+  $field_name = $results['params']['image']['field']['field_name'];
+  $nid = $results['params']['entity']->nid;
+
+  if (isset($nid) && is_numeric($nid)) {
+    $node = node_load($nid);
+    if (is_object($node)) {
+      $field_lang = field_language('node', $node, $field_name);
+      $node->{$field_name}[$field_lang] = array();
+      ksort($results['files'], SORT_NUMERIC);
+      foreach ($results['files'] as $file) {
+        $node->{$field_name}[$field_lang][]['fid'] = $file->fid;
+      }
+      node_save($node);
+    }
+    else {
+      watchdog('pdf_to_image', 'Invalid node object. Cannot attache generated images to it.', array(), WATCHDOG_ERROR);
+    }
+  }
+  else {
+    watchdog('pdf_to_image', 'Invalid node id given to attach generated images to.', array(), WATCHDOG_ERROR);
+  }
+}
+
+
+
+/**
  * Use imagemagick routine to count the number of pages in a given PDF
  */
 function pdf_to_image_count_pages($filepath) {
+  // Assume the 'identify' binary lives next to the 'convert' binary.
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
   $identify_path = dirname($convert_path) . '/identify';
 
@@ -510,6 +491,8 @@ function pdf_to_image_count_pages($filepath) {
   // can be a problem (server timeout) when processing a pdf with many pages.
   // The better command commented because it working very slow.
   // "{$identify_path} -format %n " . escapeshellarg($fpath) . ' 2> /dev/null';
+  // This one instead asks for more pages than the document has, then reads the
+  // error message that tells us what the last page number was instead :-}
   $command = "{$identify_path} " . escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
 
   $count = pdf_to_image_shell_exec($command);
@@ -518,6 +501,8 @@ function pdf_to_image_count_pages($filepath) {
 
 /**
  * Check the binary path on the server.
+ *
+ * Returns NULL if it failed, the version info of imageMagick if it succeeds.
  */
 function pdf_to_image_check_imagemagick() {
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
@@ -556,7 +541,7 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
  * Run the given command (expected to be an imageMagick Commandline)
  * Wrapped in a bugfix workaround.
  *
- * @param unknown_type $command
+ * @param string $command
  */
 function pdf_to_image_shell_exec($command) {
   // Horrible bug. If running on Acquia dev desktop, it sets a custom path for
@@ -567,7 +552,6 @@ function pdf_to_image_shell_exec($command) {
   $DYLD_LIBRARY_PATH = getenv("DYLD_LIBRARY_PATH");
   putenv("DYLD_LIBRARY_PATH=");
 
-  dpm($command);
   watchdog('pdf_to_image', 'Running commandline %command', array('%command' => $command), WATCHDOG_DEBUG);
 
   $response = shell_exec($command);
