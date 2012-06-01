@@ -21,7 +21,7 @@ function pdf_to_image_field_widget_info() {
       'settings'    => array(
         'pdf_to_image' => array(
           'target_field'        => NULL,
-          'density'             => '100x100',
+          'density'             => '25x25',
           'extra_args'          => '',
         ),
       ),
@@ -72,7 +72,7 @@ function pdf_to_image_field_widget_settings_form($field, $instance) {
 
   $form['pdf_to_image']['density'] = array(
     '#title'            => t('Density used for rendering PDF'),
-    '#description'      => t('Horizontal and vertical density of the image XxY (e.g. 120x120). Default is 100x100.'),
+    '#description'      => t('Horizontal and vertical density of the image XxY (e.g. 100x100). Default is 25x25 (25%). <em>This is not image dimensions!</em> It\'s the sampling quality of the generated image. 100x100 means the generated image will be "full size" compared to a PDF viewed at 100%. If you are only wanting preview thumbnails, you might be fine (and a LOT faster) with just 20x20 (20% size) images. Only generate full-size (100x100) images if you intend to display full-size pages. To adjust the <b>display</b> sizes on the web page, manage the display of the image field as usual.'),
     '#type'             => 'textfield',
     '#default_value'    => $pdf_to_image_settings['density'],
     '#element_validate' => array('pdf_to_image_validate_density'),
@@ -111,7 +111,7 @@ function pdf_to_image_field_widget_settings_form($field, $instance) {
 function pdf_to_image_validate_density($element, &$form_state) {
   $value = $element['#value'];
   if (!empty($value) && !preg_match('/^[0-9]+x[0-9]+$/', $value)) {
-    form_set_error('density', t('Please specify a density in the format XxY (e.g. 120x120).'));
+    form_set_error('density', t('Please specify a density in the format XxY (e.g. 100x100).'));
   }
 }
 
@@ -159,7 +159,6 @@ function pdf_to_image_field_formatter_settings_summary($field, $instance, $view_
  * Implements hook_field_formatter_view().
  */
 function pdf_to_image_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
-  dpm(__FUNCTION__);
   if (!isset($items[0])) {
     return;
   }
@@ -294,11 +293,9 @@ function pdf_to_image_form_submit($form, &$form_state) {
   // The field widget should have made a note of the field we need to process
   // in the custom $form['#pdf_to_image'] parameter.
   foreach ($form['#pdf_to_image'] as $field_id) {
-    $field = field_info_field($field_id);
     $instance = field_info_instance($entity_type, $field_id, $bundle);
     $items = $form_state['values'][$field_id];
-    $langcode = $form_state['values']['language'];
-    pdf_to_image_generate_process($entity_type, $form['#entity'], $field_id, $instance, $langcode, $items);
+    pdf_to_image_generate_process($entity_type, $form['#entity'], $field_id, $instance, $items);
   }
 }
 
@@ -307,16 +304,23 @@ function pdf_to_image_form_submit($form, &$form_state) {
  *
  * This sets up the batch job with all the neccessary parameters
  */
-function pdf_to_image_generate_process($entity_type, $entity, $field, $instance, $langcode, &$items) {
-  if (empty($items[$langcode][0]['fid'])) {
+function pdf_to_image_generate_process($entity_type, $entity, $field_id, $instance, &$items) {
+  $field = field_info_field($field_id);
+  $field_lang = field_language($entity_type, $entity, $field_id);
+dpm(get_defined_vars());
+  if (empty($items[$field_lang][0]['fid'])) {
+    // No file attachment found in the source field.
+    // Do nothing.
     return;
   }
-  $pdf_file = file_load($items[$langcode][0]['fid']);
+  $pdf_file = file_load($items[$field_lang][0]['fid']);
   $pdf_realpath = file_stream_wrapper_get_instance_by_uri($pdf_file->uri)->realpath();
   $count = pdf_to_image_count_pages($pdf_realpath);
   if (!empty($instance['widget']['settings']['pdf_to_image']['target_field'])) {
     $target_field = $instance['widget']['settings']['pdf_to_image']['target_field'];
   }
+  // Should I check if the target field is already populated and stop then?
+
   if ($target_field && $count) {
     // Arguments to give to the batch job.
     $params = array(
@@ -332,7 +336,7 @@ function pdf_to_image_generate_process($entity_type, $entity, $field, $instance,
       ),
     );
 
-    // Prepare count parametr.
+    // Prepare count parameter.
     if ($params['image']['field']['cardinality'] != -1 && $count > $params['image']['field']['cardinality']) {
       $count = $params['image']['field']['cardinality'];
     }
@@ -340,18 +344,16 @@ function pdf_to_image_generate_process($entity_type, $entity, $field, $instance,
       array('pdf_to_image_generate_process_page', array($params, 0)),
     );
 
-    if ($count > 0) {
-      watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
-      for ($page = 1; $page < $count; $page++) {
-        $operations[] = array('pdf_to_image_generate_process_page', array($params, $page));
-      }
-      batch_set(array(
-        'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
-        'operations'       => $operations,
-        'finished'         => 'pdf_to_image_generate_process_attach',
-        'progress_message' => t('Processed @current out of @total.'),
-      ));
+    watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
+    for ($page = 1; $page < $count; $page++) {
+      $operations[] = array('pdf_to_image_generate_process_page', array($params, $page));
     }
+    batch_set(array(
+      'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
+      'operations'       => $operations,
+      'finished'         => 'pdf_to_image_generate_process_attach',
+      'progress_message' => t('Processed @current out of @total.'),
+    ));
     // @TODO: save node with one entity without batch.
     // else {
     // $file = pdf_to_image_generate_page($params, 0);
@@ -365,6 +367,8 @@ function pdf_to_image_generate_process($entity_type, $entity, $field, $instance,
 
 /**
  * Generate a single page (of the given index) inside a batch process.
+ *
+ * A batch task, no return.
  */
 function pdf_to_image_generate_process_page($params, $page_number, &$context) {
   $context['results']['params'] = $params;
@@ -395,13 +399,6 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
   $image_realpath = $image_dir . '/' . $image_filename;
   $image_uri = file_stream_wrapper_uri_normalize($params['image']['field']['settings']['uri_scheme'] . '://' . $image_filename);
 
-  watchdog('pdf_to_image', 'Converting PDF: %file page %page_number: to image: %image', array(
-      '%file' => $params['pdf']['file']->uri,
-      '%page_number' => $page_number,
-      '%image' => $image_uri,
-    ), WATCHDOG_INFO
-  );
-
   if (empty($image_uri)) {
     watchdog('pdf_to_image', 'Failed to calculate a destination filename for conversion', array(), WATCHDOG_ERROR);
     return FALSE;
@@ -415,8 +412,16 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
     ->execute()->fetchCol();
   if (!empty($query)) {
     $file = file_load(array_shift($query));
+    watchdog('pdf_to_image', 'PDF preview %image already exists', array('%image' => $image_uri), WATCHDOG_INFO);
     return $file;
   }
+
+  watchdog('pdf_to_image', 'Converting PDF: %file page %page_number: to image: %image', array(
+      '%file' => $params['pdf']['file']->uri,
+      '%page_number' => $page_number,
+      '%image' => $image_uri,
+    ), WATCHDOG_INFO
+  );
 
   pdf_to_image_convert_exec($source_file . '[' . $page_number . ']', $image_realpath, array(), array($density));
 
@@ -461,11 +466,14 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
     $node = node_load($nid);
     if (is_object($node)) {
       $field_lang = field_language('node', $node, $field_name);
+      // This removes the existing images by emptying the list.
+      // The (re?) attaches the generated ones.
       $node->{$field_name}[$field_lang] = array();
       ksort($results['files'], SORT_NUMERIC);
       foreach ($results['files'] as $file) {
         $node->{$field_name}[$field_lang][]['fid'] = $file->fid;
       }
+      watchdog('pdf_to_image', 'Attached converted images to node.', array(), WATCHDOG_INFO);
       node_save($node);
     }
     else {
@@ -521,7 +529,7 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
   $args['quality'] = '-quality ' . escapeshellarg(variable_get('imagemagick_quality', 75));
   $command = implode(' ', $extra) . ' ' . escapeshellarg($source) . ' ' . implode(' ', $args) . ' ' . escapeshellarg($dest);
 
-  if (function_exists('_imagemagick_convert_exec')) {
+  if (function_exists('x_imagemagick_convert_exec')) {
     if (_imagemagick_convert_exec($command, $output, $errors) !== TRUE) {
       $errors_txt = '<pre>' . (is_array($errors) ? implode("\n", $errors) : $errors) . '</pre>';
       watchdog('pdf to image : imageapi imagemagick', $errors_txt, array(), WATCHDOG_ERROR);
