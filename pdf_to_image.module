@@ -199,13 +199,8 @@ function pdf_to_image_form_alter(&$form, &$form_state, $form_id) {
   }
 
   // Find if this entity has any fields that use the pdf_to_image widget.
-  $fields = field_info_instances($form['#entity_type'], $form['#bundle']);
-  $fields_pdf = array();
-  foreach ((array) $fields as $field) {
-    if ($field['widget']['type'] == 'pdf_to_image') {
-      $fields_pdf[$field['field_name']] = $field;
-    }
-  }
+  $fields_pdf = pdf_to_image_source_fields($form['#entity_type'], $form['#bundle']);
+  // If so, do they want us to hide anything?
   if (count($fields_pdf)) {
     foreach ($fields_pdf as $field) {
       if ($field['widget']['settings']['pdf_to_image']['hide_imagefield']) {
@@ -216,6 +211,55 @@ function pdf_to_image_form_alter(&$form, &$form_state, $form_id) {
       }
     }
   }
+}
+
+/**
+ * Returns a list of field names that are used as source files for pdf conversion.
+ *
+ * @param $entity_type eg 'node'
+ * @param $bundle eg 'document'
+ */
+function pdf_to_image_source_fields($entity_type, $bundle) {
+  // Find if this entity has any fields that use the pdf_to_image widget.
+  $fields = field_info_instances($entity_type, $bundle);
+  $pdf_fields = array();
+  foreach ((array) $fields as $field) {
+    if ($field['widget']['type'] == 'pdf_to_image') {
+      $pdf_fields[$field['field_name']] = $field;
+    }
+  }
+  return $pdf_fields;
+}
+
+/**
+ * Adds config options to settings form at /admin/config/media/image-toolkit
+ *
+ * @param array $form
+ * @param array $form_state
+ */
+function pdf_to_image_form_system_image_toolkit_settings_alter(&$form, &$form_state) {
+  // We have better diagnostics if imagemagick is used,
+  // but it's not a hard dependency.
+  // It's still handy to expose the path configuration for it though.
+  // Do this here if the imagemagick module isn't doing it.
+  if (! module_exists('imagemagick')) {
+    $form['imagemagick_convert'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Path to the "convert" binary'),
+      '#default_value' => variable_get('imagemagick_convert', 'convert'),
+      '#required' => TRUE,
+      '#element_validate' => array('pdf_to_image_is_executable_validate'),
+      '#description' => t('The complete path and filename of the ImageMagick <kbd>convert</kbd> binary used by pdf_to_image. For example: <kbd>/usr/bin/convert</kbd> or <kbd>C:\Program Files\ImageMagick-6.3.4-Q16\convert.exe</kbd>'),
+    );
+  }
+  $form['gs_path'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Path to the ghostscript "gs" binary'),
+    '#default_value' => variable_get('gs_path', '/usr/local/bin/gs'),
+    '#required' => FALSE,
+    '#element_validate' => array('pdf_to_image_is_executable_validate'),
+    '#description' => t('The complete path and filename of the Ghostscript <kbd>gs</kbd> binary used by pdf_to_image. For example: <kbd>/usr/local/bin/gs</kbd>. This is optional, but if available may be a little faster.'),
+  );
 }
 
 
@@ -239,19 +283,6 @@ function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance,
     #$elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
   }
   $elements[0]['#description'] .= '<br/>' . t('This file will produce an image thumbnail and store it in %target_field when uploaded', array('%target_field' => $instance['widget']['settings']['pdf_to_image']['target_field']));
-
-  // When a file field is being submitted, the actual save of the file happens
-  // in file_managed_file_value -> file_managed_file_save_upload etc.
-  // We rely on the actual upload ans save to have happened there.
-  // We want to add a process that happens after that.
-  // It's too deep to capture that process, so wait until it's done,
-  // and then do our thing.
-  // We therefore run our process as part of the form submit.
-  // This should mean the element upload has already finished.
-  $form['#submit'][] = 'pdf_to_image_form_submit';
-  // Need to make a note on the form of what it is to process, as it will forget otherwise
-  $form['#pdf_to_image'][] = $instance['field_name'];
-  // pdf_to_image_form_submit() will pick this note up and use it later.
 
   return $elements;
 }
@@ -277,24 +308,34 @@ function pdf_to_image_field_widget_process($element, &$form_state, $form) {
   return $element;
 }
 
+/**
+ * hook_entity_insert()
+ *
+ * Update any of our fields when a fieldable entity is being updated.
+ *
+ * @param stdclass $entity
+ * @param string $entity_type
+ */
+function pdf_to_image_entity_insert($entity, $entity_type) {
+  return pdf_to_image_entity_update($entity, $entity_type);
+}
 
 /**
- * Process our extra actions when a form containing a special file field has
- * been submitted.
+ * When a fieldable entity is being updated, regenerate the files if appropriate
+ *
  * This is the first step where generation really starts happening.
  *
- * @param array $form
- * @param array $form_state
+ * @param stdclass $entity
+ * @param string $type
  */
-function pdf_to_image_form_submit($form, &$form_state) {
-  $entity_type = $form['#entity_type'];
-  $bundle = $form['#bundle'];
-  // The field widget should have made a note of the field we need to process
-  // in the custom $form['#pdf_to_image'] parameter.
-  foreach ($form['#pdf_to_image'] as $field_id) {
-    $instance = field_info_instance($entity_type, $field_id, $bundle);
-    $items = $form_state['values'][$field_id];
-    pdf_to_image_generate_process($entity_type, $form['#entity'], $field_id, $instance, $items);
+function pdf_to_image_entity_update($entity, $entity_type) {
+  // What is this thing?
+  $info = entity_get_info($entity_type);
+  list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
+
+  $pdf_fields = pdf_to_image_source_fields($entity_type, $bundle);
+  foreach ($pdf_fields as $field_id => $field_instance) {
+    pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_instance);
   }
 }
 
@@ -303,9 +344,10 @@ function pdf_to_image_form_submit($form, &$form_state) {
  *
  * This sets up the batch job with all the neccessary parameters
  */
-function pdf_to_image_generate_process($entity_type, $entity, $field_id, $instance, &$items) {
-  $field = field_info_field($field_id);
+function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_instance) {
   $field_lang = field_language($entity_type, $entity, $field_id);
+  list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
+  $items = $entity->{$field_id};
 
   if (empty($items[$field_lang][0]['fid'])) {
     // No file attachment found in the source field.
@@ -315,22 +357,23 @@ function pdf_to_image_generate_process($entity_type, $entity, $field_id, $instan
   $pdf_file = file_load($items[$field_lang][0]['fid']);
   $pdf_realpath = file_stream_wrapper_get_instance_by_uri($pdf_file->uri)->realpath();
   $count = pdf_to_image_count_pages($pdf_realpath);
-  if (!empty($instance['widget']['settings']['pdf_to_image']['target_field'])) {
-    $target_field = $instance['widget']['settings']['pdf_to_image']['target_field'];
+  if (!empty($field_instance['widget']['settings']['pdf_to_image']['target_field'])) {
+    $target_field = $field_instance['widget']['settings']['pdf_to_image']['target_field'];
   }
   // Should I check if the target field is already populated and stop then?
 
   if ($target_field && $count) {
     // Arguments to give to the batch job.
     $params = array(
-      'entity' => $entity,
+      'entity' => $entity, // Don't actually need the whole thing, just the id really.
+      'entity_type' => $entity_type,
+      'entity_id' => $id,
       'image'  => array(
         'field'    => field_info_field($target_field),
-        'instance' => field_info_instance($entity_type, $target_field, $instance['bundle']),
+        'instance' => field_info_instance($entity_type, $target_field, $field_instance['bundle']),
       ),
       'pdf'    => array(
-        'field'    => $field,
-        'instance' => $instance,
+        'instance' => $field_instance,
         'file'     => $pdf_file,
       ),
     );
@@ -387,7 +430,7 @@ function pdf_to_image_generate_process_page($params, $page_number, &$context) {
 function pdf_to_image_generate_page($params, $page_number = 0) {
   $source_file = file_stream_wrapper_get_instance_by_uri($params['pdf']['file']->uri)->realpath();
   if (!file_exists($source_file)) {
-    watchdog('pdf_to_image', 'Invalid file given to convert. Could not read %file', array('%file' => $params['pdf']['file']->uri), WATCHDOG_ERROR);
+    watchdog('pdf_to_image', 'Invalid file given to convert. Could not read %file (%source_file)', array('%file' => $params['pdf']['file']->uri, '%source_file' => $source_file), WATCHDOG_ERROR);
     return NULL;
   }
 
@@ -411,7 +454,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
     ->execute()->fetchCol();
   if (!empty($query)) {
     $file = file_load(array_shift($query));
-    watchdog('pdf_to_image', 'PDF preview %image already exists', array('%image' => $image_uri), WATCHDOG_INFO);
+    watchdog('pdf_to_image', 'PDF preview %image already exists. Re-attaching it.', array('%image' => $image_uri), WATCHDOG_INFO);
     return $file;
   }
 
@@ -450,7 +493,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
 
 
 /**
- * Attach generated files to node at the end of batch mode.
+ * Attach generated files to the content entity (node) at the end of batch mode.
  */
 function pdf_to_image_generate_process_attach($success, $results, $operations) {
   if (!(isset($results['files']) && count($results['files']))) {
@@ -459,31 +502,62 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
   }
 
   $field_name = $results['params']['image']['field']['field_name'];
-  $nid = $results['params']['entity']->nid;
+  $entity_id = $results['params']['entity_id'];
+  $entity_type = $results['params']['entity_type'];
 
-  if (isset($nid) && is_numeric($nid)) {
-    $node = node_load($nid);
-    if (is_object($node)) {
-      $field_lang = field_language('node', $node, $field_name);
+  if (isset($entity_id) && is_numeric($entity_id)) {
+    // Don't use the entity as given, load it again as things may have happened
+    // to it since the batch job began.
+    $entity = entity_load_unchanged($entity_type, $entity_id);
+    dpm(get_defined_vars());
+    if (is_object($entity)) {
+      $field_lang = field_language($entity_type, $entity, $field_name);
       // This removes the existing images by emptying the list.
       // The (re?) attaches the generated ones.
-      $node->{$field_name}[$field_lang] = array();
+      $entity->{$field_name}[$field_lang] = array();
       ksort($results['files'], SORT_NUMERIC);
       foreach ($results['files'] as $file) {
-        $node->{$field_name}[$field_lang][]['fid'] = $file->fid;
+        #$entity->{$field_name}[$field_lang][]['fid'] = $file->fid;
+        $entity->{$field_name}[$field_lang][] = (array) $file;
       }
-      watchdog('pdf_to_image', 'Attached converted images to node.', array(), WATCHDOG_INFO);
-      node_save($node);
+      watchdog('pdf_to_image', 'Attached converted images to content.', array(), WATCHDOG_INFO);
+      $saved = pdf_to_image_entity_save($entity_type, $entity);
+      dpm($saved);
     }
     else {
-      watchdog('pdf_to_image', 'Invalid node object. Cannot attache generated images to it.', array(), WATCHDOG_ERROR);
+      watchdog('pdf_to_image', 'Invalid content object. Cannot attach generated images to it.', array(), WATCHDOG_ERROR);
     }
   }
   else {
-    watchdog('pdf_to_image', 'Invalid node id given to attach generated images to.', array(), WATCHDOG_ERROR);
+    watchdog('pdf_to_image', 'Invalid content id given to attach generated images to.', array(), WATCHDOG_ERROR);
   }
 }
 
+/**
+ * Why is there no entity_save in core??
+ * Stolen this from contrib entity.module!
+ *
+ * Needed this to allow any entity, not just node to use these fields.
+ */
+function pdf_to_image_entity_save($entity_type, $entity) {
+  $info = entity_get_info($entity_type);
+  if (method_exists($entity, 'save')) {
+    return $entity->save();
+  }
+  elseif (isset($info['save callback'])) {
+    $info['save callback']($entity);
+  }
+  elseif (in_array('EntityAPIControllerInterface', class_implements($info['controller class']))) {
+    return entity_get_controller($entity_type)->save($entity);
+  }
+  elseif (function_exists("{$entity_type}_save")) {
+    $func = "{$entity_type}_save";
+    return $func($entity);
+  }
+  else {
+    return FALSE;
+  }
+}
 
 
 /**
@@ -498,18 +572,28 @@ function pdf_to_image_count_pages($filepath) {
   // can be a problem (server timeout) when processing a pdf with many pages.
   // The better command commented because it working very slow.
   // "{$identify_path} -format %n " . escapeshellarg($fpath) . ' 2> /dev/null';
-  // This one instead asks for more pages than the document has, then reads the
-  // error message that tells us what the last page number was instead :-}
-  $command = "{$identify_path} " . escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
+
+  // Apparently this method is even faster, from
+  // http://drupal.org/node/1537658
+  // Though we'll only use it if ghostscript is present and configured.
+  $gs_path = variable_get('gs_path', '/usr/local/bin/gs');
+  if (is_executable($gs_path)) {
+    $command = "{$gs_path} -q -dNODISPLAY -c \"(". trim(escapeshellcmd($filepath),"'") .") (r) file runpdfbegin pdfpagecount = quit\"";
+  }
+  else {
+    // This one instead asks for more pages than the document has, then reads the
+    // error message that tells us what the last page number was instead :-}
+    $command = "{$identify_path} " . escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
+  }
 
   $count = pdf_to_image_shell_exec($command);
   return (int) trim($count);
 }
 
 /**
- * Check the binary path on the server.
+ * Check the binary path of 'convert' on the server.
  *
- * Returns NULL if it failed, the version info of imageMagick if it succeeds.
+ * Returns NULL if it failed, the version info of ImageMagick if it succeeds.
  */
 function pdf_to_image_check_imagemagick() {
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
@@ -517,6 +601,16 @@ function pdf_to_image_check_imagemagick() {
   return $response;
 }
 
+
+/**
+ * Verifies that the given path to a binary exists and is executable.
+ */
+function pdf_to_image_is_executable_validate($element, &$form_state,  $form) {
+  $path = $element['#value'];
+  if (!empty($path) && ! is_executable($path)) {
+    form_set_error($element['#name'], t('%title : %path was not found, valid or executable. Check to see if this exists on your system in that location', array('%title' => $element['#title'], '%path' => $element['#value'])));
+  }
+}
 
 /**
  * FWIW, may not need imagemagick module, just for this one func.
@@ -528,7 +622,7 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
   $args['quality'] = '-quality ' . escapeshellarg(variable_get('imagemagick_quality', 75));
   $command = implode(' ', $extra) . ' ' . escapeshellarg($source) . ' ' . implode(' ', $args) . ' ' . escapeshellarg($dest);
 
-  if (function_exists('x_imagemagick_convert_exec')) {
+  if (function_exists('imagemagick_convert_exec')) {
     if (_imagemagick_convert_exec($command, $output, $errors) !== TRUE) {
       $errors_txt = '<pre>' . (is_array($errors) ? implode("\n", $errors) : $errors) . '</pre>';
       watchdog('pdf to image : imageapi imagemagick', $errors_txt, array(), WATCHDOG_ERROR);
@@ -588,19 +682,16 @@ function pdf_to_image_token_info() {
   // All entities, all bundles.
   foreach ($all_fields as $entity_type => $entity_fields) {
     foreach ($entity_fields as $bundle_id => $bundle_fields) {
-      foreach ($bundle_fields as $field_id => $field) {
-        if ($field['widget']['type'] == 'pdf_to_image') {
-          $fields_pdf[$field_id] = $field;
-          // THIS is a field I need to provide a token from
-          // TODO - I really should index by field ID so the token generator
-          // knows what to look for without analyzing the content type each time.
-          // $info['tokens'][$entity_type][$field_id . ':p2i-filename'] = array(
-          // But how...
-          $info['tokens'][$entity_type]['p2i-source-filename'] = array(
-            'name' => $field['label'],
-            'description' => t("File name of the source PDF without extension."),
-          );
-        }
+      foreach (pdf_to_image_source_fields($entity_type, $bundle_id) as $field_id => $field_instance) {
+        // THIS is a field I need to provide a token from
+        // TODO - I really should index by field ID so the token generator
+        // knows what to look for without analyzing the content type each time.
+        // $info['tokens'][$entity_type][$field_id . ':p2i-filename'] = array(
+        // But how...
+        $info['tokens'][$entity_type]['p2i-source-filename'] = array(
+          'name' => $field['label'],
+          'description' => t("File name of the source PDF without extension."),
+        );
       }
 
     }
@@ -623,32 +714,20 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
   $replacements = array();
   if ($type == 'entity' && !empty($data['entity'])) {
     $entity = $data['entity'];
+    $entity_type = $data['entity_type'];
+    list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
+
     // Find any fields on this entity that may be source files for a PDF conversion.
-    if ($data['entity_type'] == 'node') {
-      $bundle = $entity->type;
-    }
-    else {
-      // Dunno how to get bundle from other entities?
-      // TOD) - find the API for this.
-      return;
-    }
-
-    $fields = field_info_instances($data['entity_type'], $bundle);
-    $fields_pdf = array();
-    foreach ((array) $fields as $field_id => $field) {
-      if ($field['widget']['type'] == 'pdf_to_image') {
-        $fields_pdf[$field_id] = $field;
-
-        if (isset($entity->{$field_id})) {
-          $source_field_values = $entity->{$field_id};
-          $field_lang = field_language($data['entity_type'], $entity, $field_id);
-          $source_values = $source_field_values[$field_lang];
-          // Assumed to be multiple
-          foreach ($source_values as $delta => $file_info) {
-            // fall-through. We've found it now.
-          }
+    $pdf_fields = pdf_to_image_source_fields($entity_type, $bundle);
+    foreach ($pdf_fields as $field_id => $field) {
+      if (isset($entity->{$field_id})) {
+        $source_field_values = $entity->{$field_id};
+        $field_lang = field_language($data['entity_type'], $entity, $field_id);
+        $source_values = $source_field_values[$field_lang];
+        // Assumed to be multiple
+        foreach ($source_values as $delta => $file_info) {
+          // fall-through. We've found $file_info now. Messy, but dunno what to do with multiple sources.
         }
-
       }
     }
 
