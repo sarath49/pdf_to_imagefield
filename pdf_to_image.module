@@ -428,7 +428,7 @@ function pdf_to_image_generate_process_page($params, $page_number, &$context) {
  * Generate a single page for the given pdf file.
  */
 function pdf_to_image_generate_page($params, $page_number = 0) {
-  $source_file = file_stream_wrapper_get_instance_by_uri($params['pdf']['file']->uri)->realpath();
+  $source_file = drupal_realpath($params['pdf']['file']->uri);
   if (!file_exists($source_file)) {
     watchdog('pdf_to_image', 'Invalid file given to convert. Could not read %file (%source_file)', array('%file' => $params['pdf']['file']->uri, '%source_file' => $source_file), WATCHDOG_ERROR);
     return NULL;
@@ -436,12 +436,12 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
 
   $density = "-density " . $params['pdf']['instance']['widget']['settings']['pdf_to_image']['density'];
 
-  $image_dir = file_stream_wrapper_get_instance_by_scheme($params['image']['field']['settings']['uri_scheme'])->realpath();
-  $image_filename = $params['image']['instance']['settings']['file_directory'] . '/' . $params['pdf']['file']->fid . "-" . $page_number . '.jpg';
-  $image_realpath = $image_dir . '/' . $image_filename;
-  $image_uri = file_stream_wrapper_uri_normalize($params['image']['field']['settings']['uri_scheme'] . '://' . $image_filename);
-  // Ensure target dir exists or we can't save into it.
-  file_prepare_directory(dirname($image_uri), FILE_CREATE_DIRECTORY);
+  // We need to know both the uri and realpath versions of the paths we want to
+  // work with.
+  $image_dir_uri = file_stream_wrapper_uri_normalize($params['image']['field']['settings']['uri_scheme'] . '://' . $params['image']['instance']['settings']['file_directory']);
+  file_prepare_directory($image_dir_uri, FILE_CREATE_DIRECTORY);
+  $image_uri = $image_dir_uri . '/' . $params['pdf']['file']->fid . "-" . $page_number . '.jpg';
+  $image_realpath = drupal_realpath($image_uri);
 
   if (empty($image_uri)) {
     watchdog('pdf_to_image', 'Failed to calculate a destination filename for conversion', array(), WATCHDOG_ERROR);
