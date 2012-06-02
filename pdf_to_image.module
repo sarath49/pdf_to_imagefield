@@ -203,7 +203,7 @@ function pdf_to_image_form_alter(&$form, &$form_state, $form_id) {
   // If so, do they want us to hide anything?
   if (count($fields_pdf)) {
     foreach ($fields_pdf as $field) {
-      if ($field['widget']['settings']['pdf_to_image']['hide_imagefield']) {
+      if (!empty($field['widget']['settings']['pdf_to_image']['hide_imagefield'])) {
         $target_field = $field['widget']['settings']['pdf_to_image']['target_field'];
         if (isset($form[$target_field])) {
           $form[$target_field]['#access'] = FALSE;
@@ -440,6 +440,8 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
   $image_filename = $params['image']['instance']['settings']['file_directory'] . '/' . $params['pdf']['file']->fid . "-" . $page_number . '.jpg';
   $image_realpath = $image_dir . '/' . $image_filename;
   $image_uri = file_stream_wrapper_uri_normalize($params['image']['field']['settings']['uri_scheme'] . '://' . $image_filename);
+  // Ensure target dir exists or we can't save into it.
+  file_prepare_directory(dirname($image_uri), FILE_CREATE_DIRECTORY);
 
   if (empty($image_uri)) {
     watchdog('pdf_to_image', 'Failed to calculate a destination filename for conversion', array(), WATCHDOG_ERROR);
@@ -509,7 +511,6 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
     // Don't use the entity as given, load it again as things may have happened
     // to it since the batch job began.
     $entity = entity_load_unchanged($entity_type, $entity_id);
-    dpm(get_defined_vars());
     if (is_object($entity)) {
       $field_lang = field_language($entity_type, $entity, $field_name);
       // This removes the existing images by emptying the list.
@@ -522,7 +523,6 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
       }
       watchdog('pdf_to_image', 'Attached converted images to content.', array(), WATCHDOG_INFO);
       $saved = pdf_to_image_entity_save($entity_type, $entity);
-      dpm($saved);
     }
     else {
       watchdog('pdf_to_image', 'Invalid content object. Cannot attach generated images to it.', array(), WATCHDOG_ERROR);
