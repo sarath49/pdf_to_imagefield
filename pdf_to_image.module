@@ -674,7 +674,7 @@ function pdf_to_image_shell_exec($command) {
  * Implements hook_token_info().
  */
 function pdf_to_image_token_info() {
-  $info['tokens']['node']['p2i-source-filename'] = array(
+  $info['tokens']['node']['pdf-source-filename'] = array(
     'name' => t("File name"),
     'description' => t("File name of the source PDF without extension."),
   );
@@ -690,9 +690,9 @@ function pdf_to_image_token_info() {
         // THIS is a field I need to provide a token from
         // TODO - I really should index by field ID so the token generator
         // knows what to look for without analyzing the content type each time.
-        // $info['tokens'][$entity_type][$field_id . ':p2i-filename'] = array(
+        // $info['tokens'][$entity_type][$field_id . ':pdf-filename'] = array(
         // But how...
-        $info['tokens'][$entity_type]['p2i-source-filename'] = array(
+        $info['tokens'][$entity_type]['pdf-source-filename'] = array(
           'name' => $field['label'],
           'description' => t("File name of the source PDF without extension."),
         );
@@ -738,7 +738,7 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
     // This looks like a slow way to do things, no?
     foreach ($tokens as $name => $original) {
       switch ($name) {
-        case 'p2i-source-filename':
+        case 'pdf-source-filename':
           $info = pathinfo($file_info['filename']);
           $replacements[$original] = $info['filename'];
           break;
