@@ -4,6 +4,10 @@
  * @file
  *   Extends file fields with a process that generates a thumbnail image
  *   or multiple image pages from an uploaded PDF
+ *
+ * @author dman dan@coders.co.nz
+ *
+ * Based on earlier worn by Elaman, fatcrobat, InternetDevels.Com, and others
  */
 
 /**
