@@ -28,7 +28,8 @@ projects[pdf_to_imagefield][subdir] = dev
 ;projects[pdf_to_imagefield][download][url] = "git@git.drupal.org:project/pdf_to_imagefield.git"
 ;projects[pdf_to_imagefield][download][branch] = "7.x-3.x"
 
-projects[pdf_to_imagefield][download][type] = "git"
-projects[pdf_to_imagefield][download][url] = "http://git.drupal.org/project/pdf_to_imagefield.git"
-projects[pdf_to_imagefield][download][branch] = "7.x-3.x"
+;projects[pdf_to_imagefield][download][type] = "git"
+;projects[pdf_to_imagefield][download][url] = "http://git.drupal.org/project/pdf_to_imagefield.git"
+;projects[pdf_to_imagefield][download][branch] = "7.x-3.x"
 
+projects[pdf_to_imagefield][version] = "7.x-3.x"
