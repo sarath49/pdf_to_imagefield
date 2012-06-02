@@ -61,9 +61,10 @@ To work this into your own site structure, see below.
   to be generated.
 - Next add a filefield to your chosen content type and choose
   'PDF to Image' as the widget.
+  This filefield should be configured to only accept PDF file types.
 - When configuring this field, you will be required to link the uploaded file
   field with the target image field.
-- You can add imagecache handling to the image field rendering as normal to
+- You can add image style handling to the image field rendering as normal to
   adjust the size of the results and how they display on the page.
 
 == Processing ==
