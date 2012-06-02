@@ -600,6 +600,10 @@ function pdf_to_image_count_pages($filepath) {
  * Returns NULL if it failed, the version info of ImageMagick if it succeeds.
  */
 function pdf_to_image_check_imagemagick() {
+  static $response;
+  if (isset($response)) {
+    return $response;
+  }
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
   $response = pdf_to_image_shell_exec($convert_path . ' -version');
   return $response;
@@ -635,7 +639,12 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
     return file_exists($dest);
   }
 
-  // else do it myself
+  // Else do it myself.
+  // Paranoia.
+  if (! pdf_to_image_check_imagemagick()) {
+    drupal_set_message(t('Imagemagick must be installed and the <a href="!admin_path">path on the server set</a> for PDFs to be processed.', array('!admin_path' => url('admin/config/media/image-toolkit'))), 'error');
+    return FALSE;
+  }
 
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
   $response = pdf_to_image_shell_exec($convert_path . ' ' . $command);
