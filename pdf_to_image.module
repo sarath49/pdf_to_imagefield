@@ -439,6 +439,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
   }
 
   $density = "-density " . $params['pdf']['instance']['widget']['settings']['pdf_to_image']['density'];
+  $extra_args = isset($params['pdf']['instance']['widget']['settings']['pdf_to_image']['extra_args']) ? $params['pdf']['instance']['widget']['settings']['pdf_to_image']['extra_args'] : "";
 
   // We need to know both the uri and realpath versions of the paths we want to
   // work with.
@@ -471,7 +472,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
     ), WATCHDOG_INFO
   );
 
-  pdf_to_image_convert_exec($source_file . '[' . $page_number . ']', $image_realpath, array(), array($density));
+  pdf_to_image_convert_exec($source_file . '[' . $page_number . ']', $image_realpath, array(), array($density, $extra_args));
 
   if (file_exists($image_realpath)) {
     watchdog('pdf_to_image', 'PDF preview %image created', array(
