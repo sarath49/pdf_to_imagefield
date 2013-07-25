@@ -758,3 +758,12 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
 
   return $replacements;
 }
+
+/**
+* Implements hook_filefield_sources_widgets().
+*
+* Adds PDF to Image to the list of  widgets compatible with FileField Sources.
+*/
+function pdf_to_image_filefield_sources_widgets() {
+  return array('pdf_to_image');
+}
