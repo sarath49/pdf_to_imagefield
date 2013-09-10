@@ -1,13 +1,12 @@
 <?php
-
 /**
  * @file
- *   Extends file fields with a process that generates a thumbnail image
- *   or multiple image pages from an uploaded PDF
+ * Extends file fields with a process that generates a thumbnail image
+ * or multiple image pages from an uploaded PDF.
  *
- * @author dman dan@coders.co.nz
+ * By dman dan@coders.co.nz
  *
- * Based on earlier worn by Elaman, fatcrobat, InternetDevels.Com, and others
+ * Based on earlier work by Elaman, fatcrobat, InternetDevels.Com, and others
  */
 
 /**
@@ -294,8 +293,8 @@ function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance,
 
 
 /**
- * A field widget process callback, triggered when a form containing our widget type
- * of file is geting rendered.
+ * A field widget process callback, triggered when a form containing our widget
+ * type of file is geting rendered.
  *
  * @see file_field_widget_process.
  */
@@ -326,7 +325,8 @@ function pdf_to_image_entity_insert($entity, $entity_type) {
 }
 
 /**
- * When a fieldable entity is being updated, regenerate the files if appropriate
+ * When a fieldable entity is being updated, regenerate the files if 
+ * appropriate.
  *
  * This is the first step where generation really starts happening.
  *
@@ -567,7 +567,7 @@ function pdf_to_image_entity_save($entity_type, $entity) {
 
 
 /**
- * Use imagemagick routine to count the number of pages in a given PDF
+ * Use imagemagick routine to count the number of pages in a given PDF.
  */
 function pdf_to_image_count_pages($filepath) {
   // Assume the 'identify' binary lives next to the 'convert' binary.
@@ -584,11 +584,11 @@ function pdf_to_image_count_pages($filepath) {
   // Though we'll only use it if ghostscript is present and configured.
   $gs_path = variable_get('gs_path', '/usr/local/bin/gs');
   if (is_executable($gs_path)) {
-    $command = "{$gs_path} -q -dNODISPLAY -c \"(". trim(escapeshellcmd($filepath),"'") .") (r) file runpdfbegin pdfpagecount = quit\"";
+    $command = "{$gs_path} -q -dNODISPLAY -c \"(" . trim(escapeshellcmd($filepath), "'") . ") (r) file runpdfbegin pdfpagecount = quit\"";
   }
   else {
     // This one instead asks for more pages than the document has, then reads the
-    // error message that tells us what the last page number was instead :-}
+    // last page that the document actually returned.
     $command = "{$identify_path} " . escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
   }
 
@@ -626,7 +626,6 @@ function pdf_to_image_is_executable_validate($element, &$form_state,  $form) {
  * FWIW, may not need imagemagick module, just for this one func.
  * If you want debugging and Win32 support, use imagemagick.module.
  * Otherwise, here's a short and dirty version of the same thing.
- *
  */
 function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = array()) {
   $args['quality'] = '-quality ' . escapeshellarg(variable_get('imagemagick_quality', 75));
@@ -663,24 +662,22 @@ function pdf_to_image_shell_exec($command) {
   // Horrible bug. If running on Acquia dev desktop, it sets a custom path for
   // the dynamic link library. But 2012-04 that was OLDER than the libraries
   // My OS expected to use to run graphics utilities with.
-  // Reason: Incompatible library version: dot requires version 10.0.0 or later, but libltdl.7.dylib provides version 9.0.0
+  // Reason: Incompatible library version: 
+  // dot requires version 10.0.0 or later, but libltdl.7.dylib provides version 9.0.0
   // UNSET the Acquia DYLD_LIBRARY_PATH before dropping to commandline to run.
   $DYLD_LIBRARY_PATH = getenv("DYLD_LIBRARY_PATH");
   putenv("DYLD_LIBRARY_PATH=");
-
   watchdog('pdf_to_image', 'Running commandline %command', array('%command' => $command), WATCHDOG_DEBUG);
-
   $response = shell_exec($command);
-
-  // Put it back just in case it matters
+  // Put it back just in case it matters.
   putenv("DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH");
-
   return $response;
 }
 
 
 /**
- * To enhance filefield_paths, publish the filename of the source document that could be used to create the filepath of the derived document.
+ * To enhance filefield_paths, publish the filename of the source document 
+ * that could be used to create the filepath of the derived document.
  *
  * Implements hook_token_info().
  */
@@ -739,9 +736,10 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
         $source_field_values = $entity->{$field_id};
         $field_lang = field_language($data['entity_type'], $entity, $field_id);
         $source_values = $source_field_values[$field_lang];
-        // Assumed to be multiple
+        // Assumed to be multiple.
         foreach ($source_values as $delta => $file_info) {
-          // fall-through. We've found $file_info now. Messy, but dunno what to do with multiple sources.
+          // Fall-through. We've found $file_info now. 
+          // Messy, but dunno what to do with multiple sources.
         }
       }
     }
@@ -761,10 +759,11 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
 }
 
 /**
-* Implements hook_filefield_sources_widgets().
-*
-* Adds PDF to Image to the list of  widgets compatible with FileField Sources.
-*/
+ * Implements hook_filefield_sources_widgets().
+ *
+ * Adds PDF to Image to the list of  widgets compatible with FileField Sources.
+ */
 function pdf_to_image_filefield_sources_widgets() {
   return array('pdf_to_image');
 }
+
