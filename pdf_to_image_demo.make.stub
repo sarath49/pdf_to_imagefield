@@ -7,7 +7,11 @@
 ; 
 ; This --working-copy command will actually git clone the working copy of the module, 
 ; ready for test and development. It's optional.
-;  
+; 
+; If you prefer to use 'Quick Drupal' that bootstraps from drush, you may even 
+; be able to get it up and running with a one-liner
+; drush qd --makefile=http://drupalcode.org/project/pdf_to_imagefield.git/blob_plain/refs/heads/7.x-3.x:/pdf_to_image_demo.make.stub pdf_to_imagefield
+
 
 api = 2
 
@@ -32,4 +36,4 @@ projects[pdf_to_imagefield][subdir] = dev
 ;projects[pdf_to_imagefield][download][url] = "http://git.drupal.org/project/pdf_to_imagefield.git"
 ;projects[pdf_to_imagefield][download][branch] = "7.x-3.x"
 
-projects[pdf_to_imagefield][version] = "7.x-3.x"
+projects[pdf_to_imagefield][version] = "3.x"
