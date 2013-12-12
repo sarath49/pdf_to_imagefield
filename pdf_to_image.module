@@ -143,13 +143,46 @@ function pdf_to_image_field_formatter_info() {
 
 
 /**
+ * Implements hook_field_formatter_settings_form().
+ */
+function pdf_to_image_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  if ($display['type'] == 'pdf_view') {
+    $element = array();
+    $element['pdf_width'] = array(
+      '#type'           => 'textfield',
+      '#title'          => t('Object width'),
+      '#description'    => t('Specify the width of the field to display a pdf file (use % or px)'),
+      '#default_value'  => $settings['pdf_width'],
+      '#required'       => TRUE,
+    );
+    $element['pdf_height'] = array(
+      '#type'           => 'textfield',
+      '#title'          => t('Object height'),
+      '#description'    => t('Specify the height of the field to display a pdf file (use % or px)'),
+      '#default_value'  => $settings['pdf_height'],
+      '#required'       => TRUE,
+    );
+    $element['pdf_alt'] = array(
+      '#type'           => 'textfield',
+      '#title'          => t('Text for download'),
+      '#description'    => t('Specify the text that will appear to download the file'),
+      '#default_value'  => $settings['pdf_alt'],
+      '#required'       => TRUE,
+    );
+  }
+  return $element;
+}
+
+/**
  * Implements hook_field_formatter_settings_summary().
  */
 function pdf_to_image_field_formatter_settings_summary($field, $instance, $view_mode) {
   $display  = $instance['display'][$view_mode];
   $settings = $display['settings'];
   if ($display['type'] == 'pdf_view') {
-    $summary  = t('Region of @width to @height, and text at download link - "@alt"', array(
+    $summary  = t('Preview embedded PDF at @widthx@height. Download link = "@alt"', array(
       '@width'  => $settings['pdf_width'],
       '@height' => $settings['pdf_height'],
       '@alt'    => $settings['pdf_alt'],
