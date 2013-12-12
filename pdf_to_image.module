@@ -134,6 +134,7 @@ function pdf_to_image_field_formatter_info() {
       'settings'    => array(
         'pdf_width'  => '100%',
         'pdf_height' => '450',
+        'pdf_alt'    => t('Download PDF file'),
       ),
     ),
   );
