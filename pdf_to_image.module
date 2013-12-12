@@ -166,9 +166,7 @@ function pdf_to_image_field_formatter_view($entity_type, $entity, $field, $insta
     return;
   }
 
-  // @TOFO fix public / private handlers, apply stream wrappers functions.
-  global $base_url;
-  $path     = $base_url . '/' . variable_get('file_public_path') . substr($items[0]['uri'], 8);
+  $path = file_create_url($items[0]['uri']);
 
   if ($display['type'] == 'pdf_view') {
     $width    = $display['settings']['pdf_width'];
