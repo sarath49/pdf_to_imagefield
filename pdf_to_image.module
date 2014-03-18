@@ -478,7 +478,10 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
   // work with.
   $image_dir_uri = file_stream_wrapper_uri_normalize($params['image']['field']['settings']['uri_scheme'] . '://' . $params['image']['instance']['settings']['file_directory']);
   file_prepare_directory($image_dir_uri, FILE_CREATE_DIRECTORY);
-  $image_uri = $image_dir_uri . '/' . $params['pdf']['file']->fid . "-" . $page_number . '.jpg';
+  if (!empty($params['image']['instance']['settings']['file_directory'])) {
+    $image_dir_uri .= '/';
+  }
+  $image_uri = $image_dir_uri . $params['pdf']['file']->fid . "-" . $page_number . '.jpg';
   $image_realpath = drupal_realpath($image_uri);
 
   if (empty($image_uri)) {
