@@ -12,9 +12,9 @@
 /**
  * Announces that we have additional widget options that extend file fields.
  *
- * @see file_field_widget_info()
- *
  * Implements hook_field_widget_info().
+ *
+ * @see file_field_widget_info()
  */
 function pdf_to_image_field_widget_info() {
   return array(
@@ -49,7 +49,7 @@ function pdf_to_image_field_widget_settings_form($field, $instance) {
   // Use the file widget settings form.
   $form = file_field_widget_settings_form($field, $instance);
 
-  // Plus our own extras
+  // Plus our own extras.
   $form['pdf_to_image'] = array(
     '#type' => 'fieldset',
     '#title' => t('PDF conversion options'),
@@ -120,7 +120,6 @@ function pdf_to_image_validate_density($element, &$form_state) {
 }
 
 
-
 /**
  * Adds another method for displaying PDF files - embedded live preview.
  *
@@ -148,6 +147,7 @@ function pdf_to_image_field_formatter_info() {
 function pdf_to_image_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
   $display = $instance['display'][$view_mode];
   $settings = $display['settings'];
+  $element = array();
   if ($display['type'] == 'pdf_view') {
     $element = array();
     $element['pdf_width'] = array(
@@ -189,6 +189,7 @@ function pdf_to_image_field_formatter_settings_summary($field, $instance, $view_
     ));
     return $summary;
   }
+  return NULL;
 }
 
 
@@ -197,7 +198,7 @@ function pdf_to_image_field_formatter_settings_summary($field, $instance, $view_
  */
 function pdf_to_image_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   if (!isset($items[0])) {
-    return;
+    return NULL;
   }
 
   $path = file_create_url($items[0]['uri']);
@@ -214,9 +215,12 @@ function pdf_to_image_field_formatter_view($entity_type, $entity, $field, $insta
     $object = l(t('Download file'), $path);
   }
 
+  if (empty($object)) {
+    return NULL;
+  }
+
   $element  = array();
   $element[0]['#markup'] = $object;
-
   return $element;
 }
 
@@ -250,10 +254,15 @@ function pdf_to_image_form_alter(&$form, &$form_state, $form_id) {
 }
 
 /**
- * Returns a list of field names that are used as source files for pdf conversion.
+ * Returns field names used as source files for pdf conversion.
  *
- * @param $entity_type eg 'node'
- * @param $bundle eg 'document'
+ * @param string $entity_type
+ *   eg 'node'
+ * @param string $bundle
+ *   eg 'document'
+ *
+ * @return array
+ *   List of field names.
  */
 function pdf_to_image_source_fields($entity_type, $bundle) {
   // Find if this entity has any fields that use the pdf_to_image widget.
@@ -268,17 +277,19 @@ function pdf_to_image_source_fields($entity_type, $bundle) {
 }
 
 /**
- * Adds config options to settings form at /admin/config/media/image-toolkit
+ * Adds config options to settings form at /admin/config/media/image-toolkit.
  *
  * @param array $form
+ *   FAPI form handle
  * @param array $form_state
+ *   FAPI form state
  */
 function pdf_to_image_form_system_image_toolkit_settings_alter(&$form, &$form_state) {
   // We have better diagnostics if imagemagick is used,
   // but it's not a hard dependency.
   // It's still handy to expose the path configuration for it though.
   // Do this here if the imagemagick module isn't doing it.
-  if (! module_exists('imagemagick')) {
+  if (!module_exists('imagemagick')) {
     $form['imagemagick_convert'] = array(
       '#type' => 'textfield',
       '#title' => t('Path to the "convert" binary'),
@@ -310,13 +321,13 @@ function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance,
 
   // This is a file widget, plus extra options.
   $elements = file_field_widget_form($form, $form_state, $field, $instance, $langcode, $items, $delta, $element);
-  $settings = $instance['settings'];
+  // $settings = $instance['settings'];
 
   foreach (element_children($elements) as $delta) {
     // If not using custom extension validation, ensure this is a pdf.
     $elements[$delta]['#upload_validators']['file_validate_extensions'][0] = 'pdf';
     // File fields need extra processing. Our one even more so.
-    #$elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
+    // $elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
   }
   $elements[0]['#description'] .= '<br/>' . t('This file will produce an image thumbnail and store it in %target_field when uploaded', array('%target_field' => $instance['widget']['settings']['pdf_to_image']['target_field']));
 
@@ -325,10 +336,11 @@ function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance,
 
 
 /**
- * A field widget process callback, triggered when a form containing our widget
- * type of file is geting rendered.
+ * Triggered when a form containing our widget type of file is geting rendered.
  *
- * @see file_field_widget_process.
+ * A field widget process callback.
+ *
+ * @see file_field_widget_process()
  */
 function pdf_to_image_field_widget_process($element, &$form_state, $form) {
   /*
@@ -345,25 +357,23 @@ function pdf_to_image_field_widget_process($element, &$form_state, $form) {
 }
 
 /**
- * hook_entity_insert()
- *
  * Update any of our fields when a fieldable entity is being updated.
  *
- * @param stdclass $entity
- * @param string $entity_type
+ * Implements hook_entity_insert()
  */
 function pdf_to_image_entity_insert($entity, $entity_type) {
   return pdf_to_image_entity_update($entity, $entity_type);
 }
 
 /**
- * When a fieldable entity is being updated, regenerate the files if 
- * appropriate.
+ * When a fieldable entity is being updated, regenerate the files.
  *
  * This is the first step where generation really starts happening.
  *
  * @param stdclass $entity
- * @param string $type
+ *   Entity being processed.
+ * @param string $entity_type
+ *   Entity type is always needed.
  */
 function pdf_to_image_entity_update($entity, $entity_type) {
   // What is this thing?
@@ -399,10 +409,11 @@ function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_
   }
   // Should I check if the target field is already populated and stop then?
 
-  if ($target_field && $count) {
+  if (!empty($target_field) && $count) {
     // Arguments to give to the batch job.
     $params = array(
-      'entity' => $entity, // Don't actually need the whole thing, just the id really.
+      'entity' => $entity,
+      // Don't actually need the whole thing, just the id really.
       'entity_type' => $entity_type,
       'entity_id' => $id,
       'image'  => array(
@@ -559,7 +570,6 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
       $entity->{$field_name}[$field_lang] = array();
       ksort($results['files'], SORT_NUMERIC);
       foreach ($results['files'] as $file) {
-        #$entity->{$field_name}[$field_lang][]['fid'] = $file->fid;
         $entity->{$field_name}[$field_lang][] = (array) $file;
       }
       watchdog('pdf_to_image', 'Attached converted images to content.', array(), WATCHDOG_INFO);
@@ -575,8 +585,10 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
 }
 
 /**
- * Why is there no entity_save in core??
- * Stolen this from contrib entity.module!
+ * Stand-in for entity_save.
+ *
+ * Why is there no entity_save in core?
+ * Stolen this from contrib entity.module.
  *
  * Needed this to allow any entity, not just node to use these fields.
  */
@@ -595,9 +607,7 @@ function pdf_to_image_entity_save($entity_type, $entity) {
     $func = "{$entity_type}_save";
     return $func($entity);
   }
-  else {
-    return FALSE;
-  }
+  return FALSE;
 }
 
 
@@ -622,8 +632,8 @@ function pdf_to_image_count_pages($filepath) {
     $command = "{$gs_path} -q -dNODISPLAY -c \"(" . trim(escapeshellcmd($filepath), "'") . ") (r) file runpdfbegin pdfpagecount = quit\"";
   }
   else {
-    // This one instead asks for more pages than the document has, then reads the
-    // last page that the document actually returned.
+    // This one instead asks for more pages than the document has, then reads
+    // the last page that the document actually returned.
     $command = "{$identify_path} " . escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
   }
 
@@ -650,7 +660,7 @@ function pdf_to_image_check_imagemagick() {
 /**
  * Verifies that the given path to a binary exists and is executable.
  */
-function pdf_to_image_is_executable_validate($element, &$form_state,  $form) {
+function pdf_to_image_is_executable_validate($element, &$form_state, $form) {
   $path = $element['#value'];
   if (!empty($path) && ! is_executable($path)) {
     form_set_error($element['#name'], t('%title : %path was not found, valid or executable. Check to see if this exists on your system in that location', array('%title' => $element['#title'], '%path' => $element['#value'])));
@@ -658,6 +668,8 @@ function pdf_to_image_is_executable_validate($element, &$form_state,  $form) {
 }
 
 /**
+ * Actually execute the shell command.
+ *
  * FWIW, may not need imagemagick module, just for this one func.
  * If you want debugging and Win32 support, use imagemagick.module.
  * Otherwise, here's a short and dirty version of the same thing.
@@ -677,7 +689,7 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
 
   // Else do it myself.
   // Paranoia.
-  if (! pdf_to_image_check_imagemagick()) {
+  if (!pdf_to_image_check_imagemagick()) {
     drupal_set_message(t('Imagemagick must be installed and the <a href="!admin_path">path on the server set</a> for PDFs to be processed.', array('!admin_path' => url('admin/config/media/image-toolkit'))), 'error');
     return FALSE;
   }
@@ -688,17 +700,23 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
 }
 
 /**
- * Run the given command (expected to be an imageMagick Commandline)
+ * Run the given command (expected to be an imageMagick Commandline).
+ *
  * Wrapped in a bugfix workaround.
  *
  * @param string $command
+ *   Command to execute.
+ *
+ * @return string
+ *   the shell response
  */
 function pdf_to_image_shell_exec($command) {
   // Horrible bug. If running on Acquia dev desktop, it sets a custom path for
   // the dynamic link library. But 2012-04 that was OLDER than the libraries
   // My OS expected to use to run graphics utilities with.
-  // Reason: Incompatible library version: 
-  // dot requires version 10.0.0 or later, but libltdl.7.dylib provides version 9.0.0
+  // Reason: Incompatible library version:
+  // dot requires version 10.0.0 or later,
+  // but libltdl.7.dylib provides version 9.0.0
   // UNSET the Acquia DYLD_LIBRARY_PATH before dropping to commandline to run.
   $DYLD_LIBRARY_PATH = getenv("DYLD_LIBRARY_PATH");
   putenv("DYLD_LIBRARY_PATH=");
@@ -711,8 +729,10 @@ function pdf_to_image_shell_exec($command) {
 
 
 /**
- * To enhance filefield_paths, publish the filename of the source document 
- * that could be used to create the filepath of the derived document.
+ * Publish the filename of the source document as a token.
+ *
+ * To enhance filefield_paths, this could be used to create the filepath
+ * of the derived document.
  *
  * Implements hook_token_info().
  */
@@ -729,7 +749,8 @@ function pdf_to_image_token_info() {
   // All entities, all bundles.
   foreach ($all_fields as $entity_type => $entity_fields) {
     foreach ($entity_fields as $bundle_id => $bundle_fields) {
-      foreach (pdf_to_image_source_fields($entity_type, $bundle_id) as $field_id => $field_instance) {
+      foreach (pdf_to_image_source_fields($entity_type, $bundle_id)
+        as $field_id => $field_instance) {
         // THIS is a field I need to provide a token from
         // TODO - I really should index by field ID so the token generator
         // knows what to look for without analyzing the content type each time.
@@ -750,8 +771,9 @@ function pdf_to_image_token_info() {
 }
 
 /**
- * Fills in a token with the filename of the source pdf field that may be
- * attached to an entity. Not very well-structured here yet.
+ * Fills in a token with the filename of the source pdf.
+ *
+ * For use with filefield_sources mostly. Not very well-structured here yet.
  *
  * Implements hook_tokens().
  */
@@ -764,7 +786,8 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
     $entity_type = $data['entity_type'];
     list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
 
-    // Find any fields on this entity that may be source files for a PDF conversion.
+    // Find any fields on this entity
+    // that may be source files for a PDF conversion.
     $pdf_fields = pdf_to_image_source_fields($entity_type, $bundle);
     foreach ($pdf_fields as $field_id => $field) {
       if (isset($entity->{$field_id})) {
@@ -773,7 +796,7 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
         $source_values = $source_field_values[$field_lang];
         // Assumed to be multiple.
         foreach ($source_values as $delta => $file_info) {
-          // Fall-through. We've found $file_info now. 
+          // Fall-through. We've found $file_info now.
           // Messy, but dunno what to do with multiple sources.
         }
       }
@@ -794,11 +817,10 @@ function pdf_to_image_tokens($type, $tokens, array $data = array(), array $optio
 }
 
 /**
- * Implements hook_filefield_sources_widgets().
- *
  * Adds PDF to Image to the list of  widgets compatible with FileField Sources.
+ *
+ * Implements hook_filefield_sources_widgets().
  */
 function pdf_to_image_filefield_sources_widgets() {
   return array('pdf_to_image');
 }
-
