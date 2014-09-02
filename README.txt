@@ -14,11 +14,12 @@ type.
   * File field, Image field and (optionally) Imagemagick module.
   
   * ImageMagick toolkit to be available on server via command-line interface.
-    http://drupal.org/project/imagemagick
+    You *can* use http://drupal.org/project/imagemagick
 
-If the Drupal imagemagick.module is not available, the process will still run, 
-however imagemagick is recommended for win32 installations and it has better
-diagnostics available.
+If the Drupal imagemagick.module is not available, the process will still run,
+using the version of 'convert' that is available on your server.
+However imagemagick.module is recommended for win32 installations and it has
+better diagnostics available.
 
 == Installation ==
 
@@ -31,13 +32,14 @@ on your server should tell you if and where the binary exists.
 Once the module is enabled, check your site status at /admin/reports/status
 You should see a message that will tell you if your system is ready to run.
 "Imagemagick support for PDF to Image"
-If not, you need to check the requirements, and the ImageMagick settings
+If not, you need to check the requirements and the ImageMagick settings
 at admin/config/media/image-toolkit.
-See the ImageMagick project docs for troubleshooting that.
+See the ImageMagick project docs for troubleshooting further.
 
 If ImageMagick appears to be available but still does not convert PDFs, it
 could be it wasn't installed with 'Ghostscript' libraries or other required
-dependencies. You'l have to go to the ImageMagick forums for help with that.
+dependencies. You'll have to go to the ImageMagick forums for help with that.
+It may be as easy as "apt-get install ghostscript" or similar, so try that.
 
 == Configuration ==
 
@@ -67,16 +69,31 @@ To work this into your own site structure, see below.
 - You can add image style handling to the image field rendering as normal to
   adjust the size of the results and how they display on the page.
 
+- Remember to confirm that ImageMagick is working for you!
+
+== Usage ==
+
+With the above configs set up right, you can now
+
+* Create a piece of content
+* if you upload a pdf and leave the image field blank, images will be generated
+  for it.
+* If you upload a PDF *and* an image of your choosing, that will be left alone.
+* If you delete the image(s), an image of the PDF will be regenerated.
+
+== Troubleshooting ==
+
+If nothing special seems to happen when saving a node, check the status report
+and ensure the Imagemagick "convert" binary, and Ghostscript "gs" is available.
+
+If it seems to start a batch job but fails, check the logs for more detail on
+the command that was run and see what failed.
+
 == Processing ==
 
 Processing of PDF may take some time.
 
 Larger documents use the 'batch' process to generate each page.
-
-== Use of ImageMagick ==
-
-Actual processing is perfomed using ImageAPI's ImageMagick toolkit.
-GD is not supported.
 
 == Field paths and tokens ==
 
@@ -98,3 +115,19 @@ On this reason, a custom functionis included in the module's source:
 function pdf_to_image_generate_page($params, $page_number = 0) {
   . . .
 }
+
+== Troubleshooting Imagemagick install ==
+
+Imagemagick does come with a stand-alone binary installer for desktop systems.
+You should try using that first.
+
+OSX (mavericks) with homebrew
+  sudo brew install imagemagick
+... seemed to work but failed with the message
+  dyld: Library not loaded: /usr/local/lib/libltdl.7.dylib
+  Referenced from: /usr/local/bin/convert
+The fix described here worked
+  https://fmt.ewi.utwente.nl/redmine/projects/jtorx/wiki/Additional_dependency_for_Mac_OS_X_108_(Mountain_Lion)_for_the_anidot_automaton_visualization
+  sudo brew uninstall libtool
+  sudo brew install libtool --universal
+(Requires XCode)

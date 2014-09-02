@@ -541,7 +541,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
     file_save($file);
     return $file;
   }
-  watchdog('pdf_to_image', 'Failed to generate image', array(), WATCHDOG_ERROR);
+  watchdog('pdf_to_image', 'Failed to generate image. Expected result at %image_realpath but it was not produced.', array('%image_realpath' => $image_realpath), WATCHDOG_ERROR);
   return FALSE;
 }
 
@@ -638,7 +638,11 @@ function pdf_to_image_count_pages($filepath) {
   }
 
   $count = pdf_to_image_shell_exec($command);
-  return (int) trim($count);
+  $count = (int) trim($count);
+  if ($count == 0) {
+    watchdog('pdf_to_image', 'Attempting to count the number of pages in PDF returned zero. This may be a currupt PDF, or the imagemagick tool may not be installed or working right. Please check the status page.', array(), WATCHDOG_ERROR);
+  }
+  return $count;
 }
 
 /**
@@ -696,7 +700,13 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
 
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
   $response = pdf_to_image_shell_exec($convert_path . ' ' . $command);
-  return file_exists($dest);
+  if (file_exists($dest)) {
+    return TRUE;
+  }
+  else {
+    watchdog('pdf_to_image', $response, array(), WATCHDOG_ERROR);
+  }
+  return FALSE;
 }
 
 /**
