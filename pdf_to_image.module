@@ -394,7 +394,7 @@ function pdf_to_image_entity_update($entity, $entity_type) {
 function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_instance) {
   $field_lang = field_language($entity_type, $entity, $field_id);
   list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
-  $items = $entity->{$field_id};
+  $items = isset($entity->{$field_id}) ? $entity->{$field_id} : array();
 
   if (empty($items[$field_lang][0]['fid'])) {
     // No file attachment found in the source field.
@@ -657,6 +657,7 @@ function pdf_to_image_check_imagemagick() {
   }
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
   $response = pdf_to_image_shell_exec($convert_path . ' -version');
+  // Here I should also check that the "Delegates:" info does include 'pdf'
   return $response;
 }
 
@@ -684,8 +685,8 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
 
   if (function_exists('imagemagick_convert_exec')) {
     if (_imagemagick_convert_exec($command, $output, $errors) !== TRUE) {
-      $errors_txt = '<pre>' . (is_array($errors) ? implode("\n", $errors) : $errors) . '</pre>';
-      watchdog('pdf to image : imageapi imagemagick', $errors_txt, array(), WATCHDOG_ERROR);
+      $errors_txt = 'imageapi imagemagick <pre>' . (is_array($errors) ? implode("\n", $errors) : $errors) . '</pre>';
+      watchdog('pdf_to_image', $errors_txt, array(), WATCHDOG_ERROR);
       return FALSE;
     }
     return file_exists($dest);
@@ -704,7 +705,7 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
     return TRUE;
   }
   else {
-    watchdog('pdf_to_image', $response, array(), WATCHDOG_ERROR);
+    watchdog('pdf_to_image', 'pdf_to_image_shell_exec did not create image %dest as expected. ' . $response, array('%dest' => $dest), WATCHDOG_ERROR);
   }
   return FALSE;
 }
@@ -730,8 +731,15 @@ function pdf_to_image_shell_exec($command) {
   // UNSET the Acquia DYLD_LIBRARY_PATH before dropping to commandline to run.
   $DYLD_LIBRARY_PATH = getenv("DYLD_LIBRARY_PATH");
   putenv("DYLD_LIBRARY_PATH=");
+
+  // This looks like a no-op, but it's actually sometimes neccessary
+  // (maybe just under dev desktop)
+  // in order to allow gs to be found! Mad.
+  putenv('PATH=' . getenv('PATH'));
+
   watchdog('pdf_to_image', 'Running commandline %command', array('%command' => $command), WATCHDOG_DEBUG);
-  $response = shell_exec($command);
+  // Capture error output in the response as well.
+  $response = shell_exec($command . '  2>&1');
   // Put it back just in case it matters.
   putenv("DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH");
   return $response;
