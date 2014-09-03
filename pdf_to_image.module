@@ -329,8 +329,8 @@ function pdf_to_image_field_widget_form(&$form, &$form_state, $field, $instance,
     // File fields need extra processing. Our one even more so.
     // $elements[$delta]['#process'][] = 'pdf_to_image_field_widget_process';
   }
-  $elements[0]['#description'] .= '<br/>' . t('This file will produce an image thumbnail and store it in %target_field when uploaded', array('%target_field' => $instance['widget']['settings']['pdf_to_image']['target_field']));
-
+  $text = t('This file will produce an image thumbnail and store it in %target_field when uploaded', array('%target_field' => $instance['widget']['settings']['pdf_to_image']['target_field']));
+  $elements['#description'] = empty($elements['#description']) ? $text : $elements['#description'] . '<br/>' . $text;
   return $elements;
 }
 
