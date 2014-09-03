@@ -501,6 +501,10 @@ function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_
       $entity->{$target_field}[$field_lang] = array();
       $entity->{$target_field}[$field_lang][] = (array) $image_file;
     };
+    // Let filefield_paths apply the renaming rules for our files.
+    if (module_exists('filefield_paths')) {
+      filefield_paths_entity_update($entity, $entity_type);
+    }
     // Saving should be taken care of by the caller?
     // No, we have run after hook_field_save, so must do it ourself.
     field_attach_presave($entity_type, $entity);
@@ -629,7 +633,16 @@ function pdf_to_image_generate_process_attach($success, $results, $operations) {
       $entity->{$field_name}[$field_lang] = array();
       ksort($results['files'], SORT_NUMERIC);
       foreach ($results['files'] as $file) {
+        // Filefield_paths will not re-rename files if it thinks the
+        // REQUEST_TIME is off.
+        // @see filefield_paths_filefield_paths_process_file()
+        // Creepy. Fudge it.
+        $file->timestamp = REQUEST_TIME;
         $entity->{$field_name}[$field_lang][] = (array) $file;
+      }
+      // Let filefield_paths rename our images if it likes.
+      if (module_exists('filefield_paths')) {
+        filefield_paths_entity_update($entity, $entity_type);
       }
       watchdog('pdf_to_image', 'Attached converted images to content.', array(), WATCHDOG_INFO);
       $saved = pdf_to_image_entity_save($entity_type, $entity);
