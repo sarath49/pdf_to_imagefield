@@ -74,6 +74,14 @@ function pdf_to_image_field_widget_settings_form($field, $instance) {
     '#options'       => $options,
   );
 
+  $form['pdf_to_image']['target_format'] = array(
+    '#title'         => t('Target Image Format'),
+    '#type'          => 'select',
+    '#default_value' => isset($pdf_to_image_settings['target_format']) ? $pdf_to_image_settings['target_format'] : 'jpg',
+    '#description'   => t('Target image file format. The target image field must be configured to accept selected format.'),
+    '#options'       => drupal_map_assoc(array('jpg','gif','png')),
+  );
+
   $form['pdf_to_image']['density'] = array(
     '#title'            => t('Density used for rendering PDF'),
     '#description'      => t('Horizontal and vertical density of the image XxY (e.g. 100x100). Default is 25x25 (25%). <em>This is not image dimensions!</em> It\'s the sampling quality of the generated image. 100x100 means the generated image will be "full size" compared to a PDF viewed at 100%. If you are only wanting preview thumbnails, you might be fine (and a LOT faster) with just 20x20 (20% size) images. Only generate full-size (100x100) images if you intend to display full-size pages. To adjust the <b>display</b> sizes on the web page, manage the display of the image field as usual.'),
@@ -531,6 +539,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
 
   $density = "-density " . $params['pdf']['instance']['widget']['settings']['pdf_to_image']['density'];
   $extra_args = isset($params['pdf']['instance']['widget']['settings']['pdf_to_image']['extra_args']) ? $params['pdf']['instance']['widget']['settings']['pdf_to_image']['extra_args'] : "";
+  $format = isset($params['pdf']['instance']['widget']['settings']['pdf_to_image']['target_format']) ? $params['pdf']['instance']['widget']['settings']['pdf_to_image']['target_format'] : "jpg";
 
   // We need to know both the uri and realpath versions of the paths we want to
   // work with.
@@ -539,7 +548,7 @@ function pdf_to_image_generate_page($params, $page_number = 0) {
   if (!empty($params['image']['instance']['settings']['file_directory'])) {
     $image_dir_uri .= '/';
   }
-  $image_uri = $image_dir_uri . $params['pdf']['file']->fid . "-" . $page_number . '.jpg';
+  $image_uri = $image_dir_uri . $params['pdf']['file']->fid . "-" . $page_number .  '.' . $format;
   $image_realpath = drupal_realpath($image_uri);
 
   if (empty($image_uri)) {
