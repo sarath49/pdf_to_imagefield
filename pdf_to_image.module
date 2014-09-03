@@ -428,7 +428,7 @@ function pdf_to_image_generate_process($entity_type, &$entity, $field_id, $field
     // This must be a manual image replace, so do NOT auto process.
     return;
   }
-  if (($previous_files[0]['fid'] == $new_files[0]['fid']) && !empty($new_images)) {
+  if (!empty($previous_files) && ($previous_files[0]['fid'] == $new_files[0]['fid']) && !empty($new_images)) {
     // Attached file has not changed, so does not need updating.
     return;
   }
