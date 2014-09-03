@@ -476,9 +476,8 @@ function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_
     ),
   );
 
-  // TODO - the step where we skip batch processing needs work.
-  // Toggle it off until we eliminate the race condition (?)
-  $always_process_in_batch = TRUE;
+  // TODO expose this as a setting.
+  $always_process_in_batch = FALSE;
 
   if ($count > 1 || $always_process_in_batch) {
     watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
@@ -500,12 +499,11 @@ function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_
     $image_file = pdf_to_image_generate_page($params, 0);
     if ($image_file) {
       $entity->{$target_field}[$field_lang] = array();
-      $entity->{$target_field}[$field_lang][] = (array)$image_file;
+      $entity->{$target_field}[$field_lang][] = (array) $image_file;
     };
     // Saving should be taken care of by the caller?
     // No, we have run after hook_field_save, so must do it ourself.
-    // TODO - this confuses itself.
-    // Image is made and attached but then .. gets lost?
+    field_attach_presave($entity_type, $entity);
     field_attach_update($entity_type, $entity);
     watchdog('pdf_to_image', '%image_file created and attached to %entity_type', array('%file' => $image_file->uri, '%entity_type' => $entity_type), WATCHDOG_INFO);
   }
