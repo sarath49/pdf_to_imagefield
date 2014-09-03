@@ -42,6 +42,7 @@ class PDFToImageTest extends DrupalWebTestCase {
    * Save a document with an attached PDF, check that the image was generated.
    */
   function testAttachingPDF() {
+    $langcode = LANGUAGE_NONE;
     $type_name = 'document';
     $field_name = 'field_document';
     $image_field_name = 'field_image';
@@ -51,17 +52,61 @@ class PDFToImageTest extends DrupalWebTestCase {
     $nid = $this->uploadNodeFile($test_file, $field_name, $type_name);
     $this->assertTrue($nid !== FALSE, format_string('Created a new @type_name with @test_file as an uploaded @field_name', array('@test_file' => $test_file->uri, '@field_name' => $field_name, '@type_name' => $type_name)));
     $node = node_load($nid, NULL, TRUE);
-    $node_file = (object) $node->{$field_name}[LANGUAGE_NONE][0];
+    $node_file = (object) $node->{$field_name}[$langcode][0];
+    $node_image = (object) $node->{$image_field_name}[$langcode][0];
 
     $message = format_string('File %file exists after uploading to %field_name.', array('%file' => $node_file->uri, '%field_name' => $field_name));
     $this->assertTrue(is_file($node_file->uri), $message);
 
     // After saving, there should also now be an attached image.
-    $node = node_load($nid, NULL, TRUE);
-    $node_image = (object) $node->{$image_field_name}[LANGUAGE_NONE][0];
     $message = format_string('Generated Image preview %file exists in %image_field_name.', array('%file' => $node_image->uri, '%image_field_name' => $image_field_name));
     $this->assertTrue(is_file($node_image->uri), $message);
 
+  }
+
+  /**
+   * Save a document with an attached PDF and a custom image.
+   *
+   * Ensure the custom image is retained.
+   */
+  function testAttachingImage() {
+    $langcode = LANGUAGE_NONE;
+    $type_name = 'document';
+    $field_name = 'field_document';
+    $image_field_name = 'field_image';
+    $test_file = $this->getTestFile('text');
+    $test_image = current($this->drupalGetTestFiles('image'));
+
+    // Create a new node with the uploaded file and image.
+    $edit = array(
+      "title" => $this->randomName(),
+    );
+    $extras['type'] = $type_name;
+    $node = $this->drupalCreateNode($extras);
+    $nid = $node->nid;
+    $node = node_load($nid, NULL, TRUE);
+
+    // Attach a file and image to the node simultaneously.
+    $edit['files[' . $field_name . '_' . $langcode . '_0]'] = drupal_realpath($test_file->uri);
+    $edit['files[' . $image_field_name . '_' . $langcode . '_0]'] = drupal_realpath($test_image->uri);
+    $this->drupalPost("node/$nid/edit", $edit, t('Save'));
+
+    $this->assertTrue($nid !== FALSE, format_string('New @type_name has @test_file as an uploaded @field_name', array('@test_file' => $test_file->uri, '@field_name' => $field_name, '@type_name' => $type_name)));
+    $this->assertTrue($nid !== FALSE, format_string('New @type_name has @test_image as an uploaded @image_field_name', array('@test_file' => $test_image->uri, '@image_field_name' => $image_field_name, '@type_name' => $type_name)));
+
+    $node = node_load($nid, NULL, TRUE);
+    $node_file = (object) $node->{$field_name}[$langcode][0];
+    $node_image = (object) $node->{$image_field_name}[$langcode][0];
+
+    $message = format_string('File %file exists after uploading to %field_name.', array('%file' => $node_file->uri, '%field_name' => $field_name));
+    $this->assertTrue(is_file($node_file->uri), $message);
+
+    // After saving, there should also now be an attached image.
+    // And it should be the one MANUALLY uploaded.
+    $message = format_string('Manual Image preview %node_image exists in %image_field_name.', array('%node_image' => $node_image->uri, '%image_field_name' => $image_field_name));
+    $this->assertTrue(is_file($node_image->uri), $message);
+    $message = format_string('Manual Image preview %node_image is the manually uploaded one %test_image.', array('%node_image' => $node_image->filename, '%test_image' => $test_image->filename));
+    $this->assertTrue($node_image->filename == $test_image->filename, $message);
   }
 
   /**
@@ -87,7 +132,6 @@ class PDFToImageTest extends DrupalWebTestCase {
       // Save at least one revision to better simulate a real site.
       $this->drupalCreateNode(get_object_vars($node));
       $node = node_load($nid, NULL, TRUE);
-      $this->assertNotEqual($nid, $node->vid, 'Node revision exists.');
     }
 
     // Attach a file to the node.
