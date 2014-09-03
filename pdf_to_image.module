@@ -468,19 +468,34 @@ function pdf_to_image_generate_process($entity_type, &$entity, $field_id, $field
     ),
   );
 
-  watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
-  for ($page = 0; $page < $count; $page++) {
-    $operations[] = array(
-      'pdf_to_image_generate_process_page',
-      array($params, $page),
-    );
+  if ($count > 1) {
+    watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
+    for ($page = 0; $page < $count; $page++) {
+      $operations[] = array(
+        'pdf_to_image_generate_process_page',
+        array($params, $page),
+      );
+    }
+    batch_set(array(
+      'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
+      'operations'       => $operations,
+      'finished'         => 'pdf_to_image_generate_process_attach',
+      'progress_message' => t('Processed @current out of @total.'),
+    ));
   }
-  batch_set(array(
-    'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
-    'operations'       => $operations,
-    'finished'         => 'pdf_to_image_generate_process_attach',
-    'progress_message' => t('Processed @current out of @total.'),
-  ));
+  // Can't do this as it means a re-save of the node during node_save.
+  else {
+    watchdog('pdf_to_image', 'Just process one page of attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
+    $context = array();
+    $file = pdf_to_image_generate_page($params, 0);
+    if ($file) {
+      $entity->{$target_field}[$field_lang] = array();
+      $entity->{$target_field}[$field_lang][] = (array)$file;
+    };
+    // Saving should be taken care of by the caller?
+    // No, we have run after hook_field_save, so must do it ourself.
+    field_attach_update($entity_type, $entity);
+  }
 }
 
 
