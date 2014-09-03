@@ -399,7 +399,7 @@ function pdf_to_image_entity_update($entity, $entity_type) {
  *
  * This sets up the batch job with all the neccessary parameters
  */
-function pdf_to_image_generate_process($entity_type, &$entity, $field_id, $field_instance) {
+function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_instance) {
   $field_lang = field_language($entity_type, $entity, $field_id);
   list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
 
@@ -476,7 +476,11 @@ function pdf_to_image_generate_process($entity_type, &$entity, $field_id, $field
     ),
   );
 
-  if ($count > 1) {
+  // TODO - the step where we skip batch processing needs work.
+  // Toggle it off until we eliminate the race condition (?)
+  $always_process_in_batch = TRUE;
+
+  if ($count > 1 || $always_process_in_batch) {
     watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
     for ($page = 0; $page < $count; $page++) {
       $operations[] = array(
@@ -491,18 +495,19 @@ function pdf_to_image_generate_process($entity_type, &$entity, $field_id, $field
       'progress_message' => t('Processed @current out of @total.'),
     ));
   }
-  // Can't do this as it means a re-save of the node during node_save.
   else {
     watchdog('pdf_to_image', 'Just process one page of attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
-    $context = array();
-    $file = pdf_to_image_generate_page($params, 0);
-    if ($file) {
+    $image_file = pdf_to_image_generate_page($params, 0);
+    if ($image_file) {
       $entity->{$target_field}[$field_lang] = array();
-      $entity->{$target_field}[$field_lang][] = (array)$file;
+      $entity->{$target_field}[$field_lang][] = (array)$image_file;
     };
     // Saving should be taken care of by the caller?
     // No, we have run after hook_field_save, so must do it ourself.
+    // TODO - this confuses itself.
+    // Image is made and attached but then .. gets lost?
     field_attach_update($entity_type, $entity);
+    watchdog('pdf_to_image', '%image_file created and attached to %entity_type', array('%file' => $image_file->uri, '%entity_type' => $entity_type), WATCHDOG_INFO);
   }
 }
 
