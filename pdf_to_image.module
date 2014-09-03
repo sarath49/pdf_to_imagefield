@@ -391,87 +391,96 @@ function pdf_to_image_entity_update($entity, $entity_type) {
  *
  * This sets up the batch job with all the neccessary parameters
  */
-function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_instance) {
+function pdf_to_image_generate_process($entity_type, &$entity, $field_id, $field_instance) {
   $field_lang = field_language($entity_type, $entity, $field_id);
   list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
-  $items = isset($entity->{$field_id}) ? $entity->{$field_id} : array();
 
-  if (empty($items[$field_lang][0]['fid'])) {
+  if (!empty($field_instance['widget']['settings']['pdf_to_image']['target_field'])) {
+    $target_field = $field_instance['widget']['settings']['pdf_to_image']['target_field'];
+  }
+  if (empty($target_field)) {
+    // No target field configured? do nothing.
+    return;
+  }
+
+  $new_files = field_get_items('node', $entity, $field_id);
+  $new_images = field_get_items('node', $entity, $target_field);
+  if (!empty($entity->original)) {
+    $previous_files = field_get_items('node', $entity->original, $field_id);
+    $previous_images = field_get_items('node', $entity->original, $target_field);
+  }
+  else {
+    $previous_files = $previous_images = array();
+  }
+
+  // Decide if it's really neccessary to regen the image.
+  if (empty($new_files)) {
     // No file attachment found in the source field.
     // Do nothing.
     return;
   }
-  $pdf_file = file_load($items[$field_lang][0]['fid']);
+
+  if (empty($previous_images) && !empty($new_images)) {
+    // This must be a manual image addition, so do NOT auto process.
+    return;
+  }
+  if (!empty($new_images[0]['fid']) && ($previous_images[0]['fid'] != $new_images[0]['fid'])) {
+    // This must be a manual image replace, so do NOT auto process.
+    return;
+  }
+  if (($previous_files[0]['fid'] == $new_files[0]['fid']) && !empty($new_images)) {
+    // Attached file has not changed, so does not need updating.
+    return;
+  }
+  // By now, we probably DO want to update.
+  // Either the image is empty, or the file has changed.
+
+  $pdf_file = file_load($new_files[0]['fid']);
   $pdf_realpath = file_stream_wrapper_get_instance_by_uri($pdf_file->uri)->realpath();
   $count = pdf_to_image_count_pages($pdf_realpath);
-  if (!empty($field_instance['widget']['settings']['pdf_to_image']['target_field'])) {
-    $target_field = $field_instance['widget']['settings']['pdf_to_image']['target_field'];
+
+  if (!$count) {
+    watchdog('pdf_to_image', 'Invalid page count on PDF %file', array('%file' => $pdf_file->uri), WATCHDOG_ERROR);
+    return;
   }
 
-  // Should check if the target field is already populated and stop.
-  $current_images = field_get_items('node', $entity, $target_field);
-  if (empty($entity->original)) {
-    // Brand new node.
-    // Don't generate an image if the imagefield already has image uploaded in it.
-    if (!empty($current_images[0]['fid'])) {
-      return;
-    }
-  }
-  else {
-    // Updating existing node.
-    // Don't generate a new image if the PDF file didn't change, and the image has not been removed.
-    $new_files = field_get_items('node', $entity, $field_id);
-    $existing_files = field_get_items('node', $entity->original, $field_id);
-    if ($new_files[0]['fid'] == $existing_files[0]['fid'] && ! empty($current_images)) {
-      // File unchanged
-      return;
-    }
-    // Else it's an update, but it does require a remake.
+  // So far so good, we have decided to proceed.
+
+  $field = field_info_field($target_field);
+  // Prepare count parameter.
+  if ($field['cardinality'] != -1 && $count > $field['cardinality']) {
+    $count = $field['cardinality'];
   }
 
-  if (!empty($target_field) && $count) {
-    // Arguments to give to the batch job.
-    $params = array(
-      'entity' => $entity,
-      // Don't actually need the whole thing, just the id really.
-      'entity_type' => $entity_type,
-      'entity_id' => $id,
-      'image'  => array(
-        'field'    => field_info_field($target_field),
-        'instance' => field_info_instance($entity_type, $target_field, $field_instance['bundle']),
-      ),
-      'pdf'    => array(
-        'instance' => $field_instance,
-        'file'     => $pdf_file,
-      ),
+  // Arguments to give to the batch job.
+  $params = array(
+    'entity' => $entity,
+    // Don't actually need the whole thing, just the id really.
+    'entity_type' => $entity_type,
+    'entity_id' => $id,
+    'image'  => array(
+      'field'    => $field,
+      'instance' => field_info_instance($entity_type, $target_field, $field_instance['bundle']),
+    ),
+    'pdf'    => array(
+      'instance' => $field_instance,
+      'file'     => $pdf_file,
+    ),
+  );
+
+  watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
+  for ($page = 0; $page < $count; $page++) {
+    $operations[] = array(
+      'pdf_to_image_generate_process_page',
+      array($params, $page),
     );
-
-    // Prepare count parameter.
-    if ($params['image']['field']['cardinality'] != -1 && $count > $params['image']['field']['cardinality']) {
-      $count = $params['image']['field']['cardinality'];
-    }
-    $operations = array(
-      array('pdf_to_image_generate_process_page', array($params, 0)),
-    );
-
-    watchdog('pdf_to_image', 'Starting a process to convert attached PDF %file to image previews', array('%file' => $params['pdf']['file']->uri), WATCHDOG_INFO);
-    for ($page = 1; $page < $count; $page++) {
-      $operations[] = array('pdf_to_image_generate_process_page', array($params, $page));
-    }
-    batch_set(array(
-      'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
-      'operations'       => $operations,
-      'finished'         => 'pdf_to_image_generate_process_attach',
-      'progress_message' => t('Processed @current out of @total.'),
-    ));
-    // @TODO: save node with one entity without batch.
-    // else {
-    // $file = pdf_to_image_generate_page($params, 0);
-    // }
   }
-  else {
-    // No target image field set, or invalid count from the PDF.
-  }
+  batch_set(array(
+    'title'            => t('Converting PDF, %count pages', array('%count' => $count)),
+    'operations'       => $operations,
+    'finished'         => 'pdf_to_image_generate_process_attach',
+    'progress_message' => t('Processed @current out of @total.'),
+  ));
 }
 
 
@@ -494,6 +503,9 @@ function pdf_to_image_generate_process_page($params, $page_number, &$context) {
 
 /**
  * Generate a single page for the given pdf file.
+ *
+ * @return array
+ *   File definition, registered in the DB.
  */
 function pdf_to_image_generate_page($params, $page_number = 0) {
   $source_file = drupal_realpath($params['pdf']['file']->uri);
@@ -720,7 +732,7 @@ function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = arr
   }
 
   $convert_path  = variable_get('imagemagick_convert', '/usr/bin/convert');
-  $response = pdf_to_image_shell_exec($convert_path . ' ' . $command);
+  $response = pdf_to_image_shell_exec($convert_path . ' ' . $command  . '  2>&1');
   if (file_exists($dest)) {
     return TRUE;
   }
@@ -759,7 +771,7 @@ function pdf_to_image_shell_exec($command) {
 
   watchdog('pdf_to_image', 'Running commandline %command', array('%command' => $command), WATCHDOG_DEBUG);
   // Capture error output in the response as well.
-  $response = shell_exec($command . '  2>&1');
+  $response = shell_exec($command);
   // Put it back just in case it matters.
   putenv("DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH");
   return $response;
