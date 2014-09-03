@@ -1,4 +1,4 @@
-= PDF To Image =
+# PDF To Image #
 
 The PDF To Image module provides automatic conversion of
 uploaded PDF files to images.
@@ -9,25 +9,37 @@ The module provides a new widget for managing PDF file uploads.
 It places generated images into a nominated Image field on the same content 
 type.
 
-== Requirements ==
+## Requirements ##
 
   * File field, Image field and (optionally) Imagemagick module.
   
-  * ImageMagick toolkit to be available on server via command-line interface.
-    You *can* use http://drupal.org/project/imagemagick
+  * ImageMagick toolkit (convert)  to be available on server and in your PATH
+    via command-line interface.
+    You *can* use [ImageMagick module](http://drupal.org/project/imagemagick) .
+
+  * Ghostscript (gs) installed on the server also.
 
 If the Drupal imagemagick.module is not available, the process will still run,
 using the version of 'convert' that is available on your server.
 However imagemagick.module is recommended for win32 installations and it has
 better diagnostics available.
 
-== Installation ==
+## Installation ##
 
 You must have the imagemagick tools available on your server, and able to
 be called from the commandline.
-Running 
-  which convert
+Running
+
+    which convert
+
 on your server should tell you if and where the binary exists.
+
+Run
+
+    convert -version
+
+to check that pdf support is available as one to the formats in the
+'Delegates' list.
 
 Once the module is enabled, check your site status at /admin/reports/status
 You should see a message that will tell you if your system is ready to run.
@@ -41,9 +53,9 @@ could be it wasn't installed with 'Ghostscript' libraries or other required
 dependencies. You'll have to go to the ImageMagick forums for help with that.
 It may be as easy as "apt-get install ghostscript" or similar, so try that.
 
-== Configuration ==
+## Configuration ##
 
-=== Quickstart ===
+### Quickstart ###
 
 A 'feature' has been provided that will ato-configure a demonstration content 
 type with some default settings applied.
@@ -54,7 +66,7 @@ type with some default settings applied.
 You should now be able to "Add content » Document" and try out the function.
 To work this into your own site structure, see below.
 
-=== Manual configuration ===
+### Manual configuration ###
 
 - First, add an image field on your chosen content type. This is where the
   generated images will be stored.
@@ -71,7 +83,7 @@ To work this into your own site structure, see below.
 
 - Remember to confirm that ImageMagick is working for you!
 
-== Usage ==
+## Usage ##
 
 With the above configs set up right, you can now
 
@@ -81,7 +93,7 @@ With the above configs set up right, you can now
 * If you upload a PDF *and* an image of your choosing, that will be left alone.
 * If you delete the image(s), an image of the PDF will be regenerated.
 
-== Troubleshooting ==
+## Troubleshooting ##
 
 If nothing special seems to happen when saving a node, check the status report
 and ensure the Imagemagick "convert" binary, and Ghostscript "gs" is available.
@@ -89,22 +101,25 @@ and ensure the Imagemagick "convert" binary, and Ghostscript "gs" is available.
 If it seems to start a batch job but fails, check the logs for more detail on
 the command that was run and see what failed.
 
-== Processing ==
+## Processing ##
 
 Processing of PDF may take some time.
 
 Larger documents use the 'batch' process to generate each page.
 
-== Field paths and tokens ==
+## Field paths and tokens ##
 
-This module SHOULD be compatable with http://drupal.org/project/filefield_paths
+This module SHOULD be compatable with
+[filefield_paths](http://drupal.org/project/filefield_paths)
 which allows you to customize the file folders and file names of the uploaded
 and generated images. A custom token
-  [node:p2i-source-filename] 
+
+    [node:p2i-source-filename]
+
 is available to allow you to name the derived images after the source PDF 
 if you wish.
 
-=== Dev notes ===
+## Dev notes ##
 
 The only candidate function from ImageAPI which may perform PDF to image
 convertion is _imageapi_imagemagick_convert(). Unfortunately, it can't pass
@@ -112,22 +127,35 @@ arguments to 'convert' tool of ImageMagick *before* source file specification,
 which is needed to change default density of 100x100dpi.
 On this reason, a custom functionis included in the module's source:
 
-function pdf_to_image_generate_page($params, $page_number = 0) {
-  . . .
-}
+    function pdf_to_image_generate_page($params, $page_number = 0) {
+      . . .
+    }
 
-== Troubleshooting Imagemagick install ==
+[Triggering from code](https://www.drupal.org/node/2327213)
+The actual conversion process happens in a Drupal batch task. Thus, you must
+be calling it in a way that allows batch processing (such as a form submission)
+If calling entity_save() programatically (like via cron) you may need to
+manually trigger batch_process() as well.
+
+
+## Troubleshooting Imagemagick install ##
 
 Imagemagick does come with a stand-alone binary installer for desktop systems.
 You should try using that first.
 
 OSX (mavericks) with homebrew
-  sudo brew install imagemagick
-... seemed to work but failed with the message
-  dyld: Library not loaded: /usr/local/lib/libltdl.7.dylib
-  Referenced from: /usr/local/bin/convert
+
+    sudo brew install imagemagick
+
+... seemed to work but failed with the message:
+
+    dyld: Library not loaded: /usr/local/lib/libltdl.7.dylib
+    Referenced from: /usr/local/bin/convert
+
 The fix described here worked
   https://fmt.ewi.utwente.nl/redmine/projects/jtorx/wiki/Additional_dependency_for_Mac_OS_X_108_(Mountain_Lion)_for_the_anidot_automaton_visualization
-  sudo brew uninstall libtool
-  sudo brew install libtool --universal
+
+    sudo brew uninstall libtool
+    sudo brew install libtool --universal
+
 (Requires XCode)
