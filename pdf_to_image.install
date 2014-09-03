@@ -3,8 +3,26 @@
 /**
  * @file
  * PDF to Image install and enable hooks.
+ *
+ * I make use of imagemagick_convert variable, but do not delete it on
+ * uninstall, as this var is actually owned by imagemagick module if it exists.
  */
 
+
+/**
+ * Implements hook_install().
+ */
+function pdf_to_image_install() {
+  if ('' == (variable_get('imagemagick_convert', ''))) {
+    // Try to find the ImageMagick path.
+    foreach (array('/usr/bin/convert', '/usr/local/bin/convert') as $path) {
+      if (file_exists($path)) {
+        variable_set('imagemagick_convert', $path);
+        break;
+      }
+    }
+  }
+}
 
 /**
  * Implements hook_requirements().
