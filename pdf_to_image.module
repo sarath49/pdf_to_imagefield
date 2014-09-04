@@ -95,13 +95,10 @@ function pdf_to_image_field_widget_settings_form($field, $instance) {
   $form['pdf_to_image']['extra_args'] = array(
     '#title'         => t('Extra conversion arguments'),
     '#type'          => 'textfield',
-    '#description'   => t('Enter optional <a href="http://imagemagick.org/Usage/formats/#ps">additional parameters to be used by the imagemagick conversion</a> if needed.<br/>eg <code>-trim +repage</code>'),
+    '#description'   => t('Enter optional <a href="http://imagemagick.org/Usage/formats/#ps">additional parameters to be used by the imagemagick conversion</a> if needed.<br/>eg <code>-trim +repage -quality 85</code>'),
     '#default_value' => !empty($pdf_to_image_settings['extra_args']) ? $pdf_to_image_settings['extra_args'] : '',
     '#size'          => 20,
   );
-
-  // @TODO: implement this.
-  $form['pdf_to_image']['extra_args']['#description'] .= '<br />' . t('WARNING! not working feature now.');
 
   $form['pdf_to_image']['hide_imagefield'] = array(
     '#type'          => 'checkbox',
@@ -752,8 +749,7 @@ function pdf_to_image_is_executable_validate($element, &$form_state, $form) {
  * Otherwise, here's a short and dirty version of the same thing.
  */
 function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = array()) {
-  $args['quality'] = '-quality ' . escapeshellarg(variable_get('imagemagick_quality', 75));
-  $command = implode(' ', $extra) . ' ' . escapeshellarg($source) . ' ' . implode(' ', $args) . ' ' . escapeshellarg($dest);
+  $command = implode(' ', $extra) . ' ' . escapeshellarg($source) . ' ' . escapeshellarg($dest);
 
   if (function_exists('imagemagick_convert_exec')) {
     if (_imagemagick_convert_exec($command, $output, $errors) !== TRUE) {
