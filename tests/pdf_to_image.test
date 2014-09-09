@@ -15,6 +15,9 @@ class PDFToImageTest extends DrupalWebTestCase {
   protected $profile = 'minimal';
 
   protected $adminUser;
+  protected $typeName = 'document';
+  protected $fieldName = 'field_document';
+  protected $imageFieldName = 'field_image';
 
   /**
    * {@inheritdoc}
@@ -34,34 +37,44 @@ class PDFToImageTest extends DrupalWebTestCase {
    */
   public function setUp() {
     parent::setUp('pdf_to_image', 'features', 'pdf_document');
-    $this->adminUser = $this->drupalCreateUser(array('access content', 'access administration pages', 'administer site configuration', 'administer content types', 'administer nodes', 'bypass node access'));
+    $this->adminUser = $this->drupalCreateUser(array(
+      'access content',
+      'access administration pages',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'bypass node access',
+    ));
     $this->drupalLogin($this->adminUser);
   }
 
   /**
    * Save a document with an attached PDF, check that the image was generated.
    */
-  function testAttachingPDF() {
+  public function testAttachingPDF() {
     $langcode = LANGUAGE_NONE;
-    $type_name = 'document';
-    $field_name = 'field_document';
-    $image_field_name = 'field_image';
     $test_file = $this->getTestFile('text');
 
     // Create a new node with the uploaded file.
-    $nid = $this->uploadNodeFile($test_file, $field_name, $type_name);
-    $this->assertTrue($nid !== FALSE, format_string('Created a new @type_name with @test_file as an uploaded @field_name', array('@test_file' => $test_file->uri, '@field_name' => $field_name, '@type_name' => $type_name)));
+    $nid = $this->uploadNodeFile($test_file, $this->fieldName, $this->typeName);
+    $this->assertTrue($nid !== FALSE, format_string(
+      'Created a new @type_name with @test_file as an uploaded @field_name',
+      array(
+        '@test_file' => $test_file->uri,
+        '@field_name' => $this->fieldName,
+        '@type_name' => $this->typeName)
+    ));
+    // Inspect the saved fields.
     $node = node_load($nid, NULL, TRUE);
-    $node_file = (object) $node->{$field_name}[$langcode][0];
-    $node_image = (object) $node->{$image_field_name}[$langcode][0];
+    $node_file = (object) $node->{$this->fieldName}[$langcode][0];
+    $node_image = (object) $node->{$this->imageFieldName}[$langcode][0];
 
-    $message = format_string('File %file exists after uploading to %field_name.', array('%file' => $node_file->uri, '%field_name' => $field_name));
+    $message = format_string('File %file exists after uploading to %field_name.', array('%file' => $node_file->uri, '%field_name' => $this->fieldName));
     $this->assertTrue(is_file($node_file->uri), $message);
 
     // After saving, there should also now be an attached image.
-    $message = format_string('Generated Image preview %file exists in %image_field_name.', array('%file' => $node_image->uri, '%image_field_name' => $image_field_name));
+    $message = format_string('Generated Image preview %file exists in %image_field_name.', array('%file' => $node_image->uri, '%image_field_name' => $this->imageFieldName));
     $this->assertTrue(is_file($node_image->uri), $message);
-
   }
 
   /**
@@ -69,11 +82,8 @@ class PDFToImageTest extends DrupalWebTestCase {
    *
    * Ensure the custom image is retained.
    */
-  function testAttachingImage() {
+  public function testAttachingImage() {
     $langcode = LANGUAGE_NONE;
-    $type_name = 'document';
-    $field_name = 'field_document';
-    $image_field_name = 'field_image';
     $test_file = $this->getTestFile('text');
     $test_image = current($this->drupalGetTestFiles('image'));
 
@@ -81,29 +91,40 @@ class PDFToImageTest extends DrupalWebTestCase {
     $edit = array(
       "title" => $this->randomName(),
     );
-    $extras['type'] = $type_name;
+    $extras['type'] = $this->typeName;
     $node = $this->drupalCreateNode($extras);
     $nid = $node->nid;
-    $node = node_load($nid, NULL, TRUE);
 
     // Attach a file and image to the node simultaneously.
-    $edit['files[' . $field_name . '_' . $langcode . '_0]'] = drupal_realpath($test_file->uri);
-    $edit['files[' . $image_field_name . '_' . $langcode . '_0]'] = drupal_realpath($test_image->uri);
+    $edit['files[' . $this->fieldName . '_' . $langcode . '_0]'] = drupal_realpath($test_file->uri);
+    $edit['files[' . $this->imageFieldName . '_' . $langcode . '_0]'] = drupal_realpath($test_image->uri);
     $this->drupalPost("node/$nid/edit", $edit, t('Save'));
 
-    $this->assertTrue($nid !== FALSE, format_string('New @type_name has @test_file as an uploaded @field_name', array('@test_file' => $test_file->uri, '@field_name' => $field_name, '@type_name' => $type_name)));
-    $this->assertTrue($nid !== FALSE, format_string('New @type_name has @test_image as an uploaded @image_field_name', array('@test_file' => $test_image->uri, '@image_field_name' => $image_field_name, '@type_name' => $type_name)));
+    $this->assertTrue($nid !== FALSE, format_string(
+      'New @type_name has @test_file as an uploaded @field_name', array(
+        '@test_file' => $test_file->uri,
+        '@field_name' => $this->fieldName,
+        '@type_name' => $this->typeName,
+      )
+    ));
+    $this->assertTrue($nid !== FALSE, format_string(
+      'New @type_name has @test_image as an uploaded @image_field_name', array(
+        '@test_file' => $test_image->uri,
+        '@image_field_name' => $this->imageFieldName,
+        '@type_name' => $this->typeName,
+      )
+    ));
 
     $node = node_load($nid, NULL, TRUE);
-    $node_file = (object) $node->{$field_name}[$langcode][0];
-    $node_image = (object) $node->{$image_field_name}[$langcode][0];
+    $node_file = (object) $node->{$this->fieldName}[$langcode][0];
+    $node_image = (object) $node->{$this->imageFieldName}[$langcode][0];
 
-    $message = format_string('File %file exists after uploading to %field_name.', array('%file' => $node_file->uri, '%field_name' => $field_name));
+    $message = format_string('File %file exists after uploading to %field_name.', array('%file' => $node_file->uri, '%field_name' => $this->fieldName));
     $this->assertTrue(is_file($node_file->uri), $message);
 
     // After saving, there should also now be an attached image.
     // And it should be the one MANUALLY uploaded.
-    $message = format_string('Manual Image preview %node_image exists in %image_field_name.', array('%node_image' => $node_image->uri, '%image_field_name' => $image_field_name));
+    $message = format_string('Manual Image preview %node_image exists in %image_field_name.', array('%node_image' => $node_image->uri, '%image_field_name' => $this->imageFieldName));
     $this->assertTrue(is_file($node_image->uri), $message);
     $message = format_string('Manual Image preview %node_image is the manually uploaded one %test_image.', array('%node_image' => $node_image->filename, '%test_image' => $test_image->filename));
     $this->assertTrue($node_image->filename == $test_image->filename, $message);
@@ -112,9 +133,11 @@ class PDFToImageTest extends DrupalWebTestCase {
   /**
    * Uploads a file to a node.
    *
+   * Utility.
+   *
    * @see file.test
    */
-  function uploadNodeFile($file, $field_name, $nid_or_type, $new_revision = TRUE, $extras = array()) {
+  protected function uploadNodeFile($file, $field_name, $nid_or_type, $new_revision = TRUE, $extras = array()) {
     $langcode = LANGUAGE_NONE;
     $edit = array(
       "title" => $this->randomName(),
@@ -131,7 +154,7 @@ class PDFToImageTest extends DrupalWebTestCase {
       $nid = $node->nid;
       // Save at least one revision to better simulate a real site.
       $this->drupalCreateNode(get_object_vars($node));
-      $node = node_load($nid, NULL, TRUE);
+      //$node = node_load($nid, NULL, TRUE);
     }
 
     // Attach a file to the node.
@@ -143,17 +166,168 @@ class PDFToImageTest extends DrupalWebTestCase {
 
   /**
    * Retrieves a sample file of the specified type.
+   *
+   * public static as it's a re-usable util.
    */
-  function getTestFile($type_name, $size = NULL) {
+  public static function getTestFile($type_name, $size = NULL) {
     // Get a file to upload.
     $source_url = drupal_get_path('module', 'pdf_to_image') . '/tests/test_pdf.pdf';
     $dest_url = "public://test_pdf.pdf";
     file_unmanaged_copy($source_url, $dest_url);
-    $this->assertTrue(file_exists($dest_url), 'Test PDF file is available for attaching.');
     $file = new stdClass();
     $file->uri = $dest_url;
     $file->filesize = filesize($file->uri);
     return $file;
+  }
+
+}
+
+
+/**
+ * Test attaching a PDF using filefield_paths patterns.
+ */
+class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
+
+  // Avoid conflict with default install profiles 'image' field.
+  protected $profile = 'minimal';
+  protected $adminUser;
+
+  protected $typeName = 'document';
+  protected $fieldName = 'field_document';
+  protected $imageFieldName = 'field_image';
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('PDF to Image + Filefield Paths'),
+      'description' => t('Test attaching a PDF and storing images with tokenized paths.'),
+      'group' => t('PDF to Image'),
+      'dependencies' => array('pdf_to_image', 'features', 'filefield_paths'),
+    );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setUp() {
+    parent::setUp('pdf_to_image', 'features', 'pdf_document', 'field_ui', 'filefield_paths');
+    $this->adminUser = $this->drupalCreateUser(array(
+      'access content',
+      'access administration pages',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->adminUser);
+  }
+
+  /**
+   * Use the UI to set the filefield path to a new token pattern.
+   */
+  public function changeFileFieldPath() {
+    // @see FieldUIManageFieldsTestCase
+    // Go to the field edit page.
+    $this->drupalGet('admin/structure/types/manage/' . $this->typeName . '/fields/' . $this->imageFieldName);
+
+    // Change the image field settings to use a new storage path.
+    $custom_pattern = '[node:pdf-source-filename]-[file:ffp-name-only-original].[file:ffp-extension-original]';
+    $edit = array(
+      'instance[settings][filefield_paths_enabled]' => TRUE,
+      'instance[settings][filefield_paths][file_path][value]' => 'custom',
+      'instance[settings][filefield_paths][file_name][value]' => $custom_pattern,
+    );
+    $this->drupalPost(NULL, $edit, t('Save settings'));
+
+    // Assert the field settings are saved and correct.
+
+    // Check settings in the UI persist.
+    $this->drupalGet('admin/structure/types/manage/' . $this->typeName . '/fields/' . $this->imageFieldName);
+
+    // Also check via the back end.
+    field_info_cache_clear();
+    $instance = field_info_instance('node', $this->imageFieldName, $this->typeName);
+    $this->assertTrue($instance['settings']['filefield_paths']['file_path']['value'] == 'custom', 'Fieldfield path setting change was saved correctly.');
+    $message = format_string(
+      'Fieldfield path setting uses a custom token pattern %custom_pattern.',
+      array('%custom_pattern' => $custom_pattern)
+    );
+    $this->assertTrue($instance['settings']['filefield_paths']['file_name']['value'] == $custom_pattern, $message);
+
+  }
+
+  /**
+   * Save a document with an attached PDF, check that the image was generated.
+   */
+  public function testAttachingPDF() {
+    $langcode = LANGUAGE_NONE;
+    $this->typeName = 'document';
+    $this->fieldName = 'field_document';
+    $this->imageFieldName = 'field_image';
+    // Use the settings to add tokens to the expected storage path.
+    $this->changeFileFieldPath();
+
+    $test_file = PDFToImageTest::getTestFile('text');
+
+    // Create a new node with the uploaded file.
+    $nid = $this->uploadNodeFile($test_file, $this->fieldName, $this->typeName);
+    $this->assertTrue($nid !== FALSE, format_string(
+      'Created a new @type_name with @test_file as an uploaded @field_name',
+      array(
+        '@test_file' => $test_file->uri,
+        '@field_name' => $this->fieldName,
+        '@type_name' => $this->typeName,
+      )
+    ));
+    $node = node_load($nid, NULL, TRUE);
+    $node_file = (object) $node->{$this->fieldName}[$langcode][0];
+    $node_image = (object) $node->{$this->imageFieldName}[$langcode][0];
+
+    // After saving, there should also now be an attached image.
+    $message = format_string(
+      'Generated image preview %file exists in %image_field_name.',
+      array('%file' => $node_image->uri, '%image_field_name' => $this->imageFieldName)
+    );
+
+    // Check the filefield_path settings took effect.
+    $this->assertTrue(is_file($node_image->uri), $message);
+    $message = format_string(
+      'Generated image file is stored in a custom folder using filefield_paths %image_file',
+      array('%image_file' => $node_image->uri)
+    );
+    $this->assertTrue(strstr($node_image->uri, 'custom'), $message);
+
+    $filename = pathinfo($node_file->uri, PATHINFO_FILENAME);
+    $message = format_string(
+      'Generated image file %image_file is named after the source document, using a filefield_paths token %filename',
+      array('%image_file' => $node_image->uri, '%filename' => $filename)
+    );
+    $this->assertTrue(strstr($node_image->uri, $filename), $message);
+
+  }
+
+
+  /**
+   * Uploads a file to a node.
+   *
+   * @see file.test
+   */
+  protected function uploadNodeFile($file, $field_name, $type, $new_revision = TRUE, $extras = array()) {
+    $langcode = LANGUAGE_NONE;
+    $edit = array(
+      "title" => $this->randomName(),
+      'revision' => (string) (int) $new_revision,
+    );
+    // Add a new node.
+    $extras['type'] = $type;
+    $node = $this->drupalCreateNode($extras);
+    $nid = $node->nid;
+    // Attach a file to the node.
+    $edit['files[' . $field_name . '_' . $langcode . '_0]'] = drupal_realpath($file->uri);
+    $this->drupalPost("node/$nid/edit", $edit, t('Save'));
+    return $nid;
   }
 
 }
