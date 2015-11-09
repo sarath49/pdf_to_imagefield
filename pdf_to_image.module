@@ -506,7 +506,7 @@ function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_
     // No, we have run after hook_field_save, so must do it ourself.
     field_attach_presave($entity_type, $entity);
     field_attach_update($entity_type, $entity);
-    watchdog('pdf_to_image', '%image_file created and attached to %entity_type', array('%file' => $image_file->uri, '%entity_type' => $entity_type), WATCHDOG_INFO);
+    watchdog('pdf_to_image', '%image created and attached to %entity_type', array('%image' => $image_file->uri, '%entity_type' => $entity_type), WATCHDOG_INFO);
   }
 }
 
