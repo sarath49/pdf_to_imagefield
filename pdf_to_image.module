@@ -698,12 +698,12 @@ function pdf_to_image_count_pages($filepath) {
   // Though we'll only use it if ghostscript is present and configured.
   $gs_path = variable_get('gs_path', '/usr/local/bin/gs');
   if (is_executable($gs_path)) {
-    $command = "{$gs_path} -q -dNODISPLAY -c \"(" . trim(escapeshellcmd($filepath), "'") . ") (r) file runpdfbegin pdfpagecount = quit\"";
+    $command = "{$gs_path} -q -dNODISPLAY -c \"(" . trim(pdf_to_image_escapeshellarg($filepath), "'") . ") (r) file runpdfbegin pdfpagecount = quit\"";
   }
   else {
     // This one instead asks for more pages than the document has, then reads
     // the last page that the document actually returned.
-    $command = "{$identify_path} " . escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
+    $command = "{$identify_path} " . pdf_to_image_escapeshellarg($filepath) . '[9999] | grep "Requested FirstPage" | cut -d : -f2';
   }
 
   $count = pdf_to_image_shell_exec($command);
@@ -749,7 +749,7 @@ function pdf_to_image_is_executable_validate($element, &$form_state, $form) {
  * Otherwise, here's a short and dirty version of the same thing.
  */
 function pdf_to_image_convert_exec($source, $dest, $args = array(), $extra = array()) {
-  $command = implode(' ', $extra) . ' ' . escapeshellarg($source) . ' ' . escapeshellarg($dest);
+  $command = implode(' ', $extra) . ' ' . pdf_to_image_escapeshellarg($source) . ' ' . pdf_to_image_escapeshellarg($dest);
 
   if (function_exists('imagemagick_convert_exec')) {
     if (_imagemagick_convert_exec($command, $output, $errors) !== TRUE) {
@@ -813,6 +813,21 @@ function pdf_to_image_shell_exec($command) {
   return $response;
 }
 
+/**
+ * Wrapper to escapeshellargs to handle non-ASCII filenames.
+ *
+ * Stolen from https://www.drupal.org/node/1502924
+ *
+ * @see https://drupal.org/node/1502924 for imagemagick module issue,
+ *   https://drupal.org/node/1561214 for Drupal core issue.
+ */
+function pdf_to_image_escapeshellarg($arg) {
+  $old_locale = setlocale(LC_CTYPE, 0);
+  setlocale(LC_CTYPE, 'C.UTF-8');
+  $arg_escaped = escapeshellarg($arg);
+  setlocale(LC_CTYPE, $old_locale);
+  return $arg_escaped;
+}
 
 /**
  * Publish the filename of the source document as a token.
