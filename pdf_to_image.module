@@ -497,27 +497,27 @@ function pdf_to_image_generate_process($entity_type, $entity, $field_id, $field_
     if ($image_file) {
       $entity->{$target_field}[$field_lang] = array();
       $entity->{$target_field}[$field_lang][] = (array) $image_file;
-	  $image_file_uri = $image_file->uri;
+      $image_file_uri = $image_file->uri;
     }
-	else {
-	  $image_file_uri = "NO IMAGE";
-	}
+    else {
+      $image_file_uri = "NO IMAGE";
+    }
     // Let filefield_paths apply the renaming rules for our files.
     if (module_exists('filefield_paths')) {
-	  filefield_paths_field_storage_pre_update($entity_type, $entity);
+      filefield_paths_field_storage_pre_update($entity_type, $entity);
     }
     // Saving should be taken care of by the caller?
     // No, we have run after hook_field_save, so must do it ourself.
     field_attach_presave($entity_type, $entity);
     field_attach_update($entity_type, $entity);
 
-	// Essential cleanup of use of filefield_paths_field_storage_pre_update(). Please see https://www.drupal.org/node/2503839
+    // Essential cleanup of use of filefield_paths_field_storage_pre_update(). Please see https://www.drupal.org/node/2503839
     if ($image_file && empty($previous_images) && module_exists('filefield_paths') && !empty($entity->original->{$target_field}[$field_lang])) {
-		list($entity_id,,) = entity_extract_ids($entity_type, $entity);
-		file_usage_add($image_file, 'file', $entity_type, $entity_id, 1);
-	}
+      list($entity_id,,) = entity_extract_ids($entity_type, $entity);
+      file_usage_add($image_file, 'file', $entity_type, $entity_id, 1);
+    }
     watchdog('pdf_to_image', '%file created and attached to %entity_type', array('%file' => $image_file_uri, '%entity_type' => $entity_type), WATCHDOG_INFO);
-	}
+  }
 }
 
 
