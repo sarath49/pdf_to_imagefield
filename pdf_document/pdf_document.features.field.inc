@@ -1,4 +1,5 @@
 <?php
+
 /**
  * @file
  * pdf_document.features.field.inc
@@ -10,7 +11,7 @@
 function pdf_document_field_default_fields() {
   $fields = array();
 
-  // Exported field: 'node-document-body'
+  // Exported field: 'node-document-body'.
   $fields['node-document-body'] = array(
     'field_config' => array(
       'active' => '1',
@@ -82,7 +83,7 @@ function pdf_document_field_default_fields() {
     ),
   );
 
-  // Exported field: 'node-document-field_document'
+  // Exported field: 'node-document-field_document'.
   $fields['node-document-field_document'] = array(
     'field_config' => array(
       'active' => '1',
@@ -160,7 +161,7 @@ function pdf_document_field_default_fields() {
     ),
   );
 
-  // Exported field: 'node-document-field_image'
+  // Exported field: 'node-document-field_image'.
   $fields['node-document-field_image'] = array(
     'field_config' => array(
       'active' => '1',

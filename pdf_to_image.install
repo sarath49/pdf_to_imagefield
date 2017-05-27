@@ -8,7 +8,6 @@
  * uninstall, as this var is actually owned by imagemagick module if it exists.
  */
 
-
 /**
  * Implements hook_install().
  */
@@ -29,7 +28,7 @@ function pdf_to_image_install() {
  */
 function pdf_to_image_requirements($phase) {
   $requirements = array();
-  // Ensure translations don't break at install time
+  // Ensure translations don't break at install time.
   $t = get_t();
 
   if ($phase == 'runtime') {
@@ -52,4 +51,3 @@ function pdf_to_image_requirements($phase) {
 
   return $requirements;
 }
-

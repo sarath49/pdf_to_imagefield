@@ -1,4 +1,5 @@
 <?php
+
 /**
  * @file
  * Test the file attachment and process.
@@ -11,7 +12,6 @@
  */
 class PDFToImageTest extends DrupalWebTestCase {
 
-  // Avoid conflict with default install profiles 'image' field.
   protected $profile = 'minimal';
 
   protected $adminUser;
@@ -51,7 +51,7 @@ class PDFToImageTest extends DrupalWebTestCase {
   /**
    * Save a document with an attached PDF, check that the image was generated.
    */
-  public function testAttachingPDF() {
+  public function testAttachingPdf() {
     $langcode = LANGUAGE_NONE;
     $test_file = $this->getTestFile('text');
 
@@ -62,7 +62,8 @@ class PDFToImageTest extends DrupalWebTestCase {
       array(
         '@test_file' => $test_file->uri,
         '@field_name' => $this->fieldName,
-        '@type_name' => $this->typeName)
+        '@type_name' => $this->typeName,
+      )
     ));
     // Inspect the saved fields.
     $node = node_load($nid, NULL, TRUE);
@@ -154,7 +155,7 @@ class PDFToImageTest extends DrupalWebTestCase {
       $nid = $node->nid;
       // Save at least one revision to better simulate a real site.
       $this->drupalCreateNode(get_object_vars($node));
-      //$node = node_load($nid, NULL, TRUE);
+      // $node = node_load($nid, NULL, TRUE);.
     }
 
     // Attach a file to the node.
@@ -167,7 +168,7 @@ class PDFToImageTest extends DrupalWebTestCase {
   /**
    * Retrieves a sample file of the specified type.
    *
-   * public static as it's a re-usable util.
+   * Public static as it's a re-usable util.
    */
   public static function getTestFile($type_name, $size = NULL) {
     // Get a file to upload.
@@ -188,7 +189,6 @@ class PDFToImageTest extends DrupalWebTestCase {
  */
 class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
 
-  // Avoid conflict with default install profiles 'image' field.
   protected $profile = 'minimal';
   protected $adminUser;
 
@@ -242,7 +242,6 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
     $this->drupalPost(NULL, $edit, t('Save settings'));
 
     // Assert the field settings are saved and correct.
-
     // Check settings in the UI persist.
     $this->drupalGet('admin/structure/types/manage/' . $this->typeName . '/fields/' . $this->imageFieldName);
 
@@ -261,7 +260,7 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
   /**
    * Save a document with an attached PDF, check that the image was generated.
    */
-  public function testAttachingPDF() {
+  public function testAttachingPdf() {
     $langcode = LANGUAGE_NONE;
     $this->typeName = 'document';
     $this->fieldName = 'field_document';
@@ -307,7 +306,6 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
     $this->assertTrue(strstr($node_image->uri, $filename), $message);
 
   }
-
 
   /**
    * Uploads a file to a node.
