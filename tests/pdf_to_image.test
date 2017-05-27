@@ -196,6 +196,8 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
   protected $fieldName = 'field_document';
   protected $imageFieldName = 'field_image';
 
+  protected $customPattern = '[node:pdf-source-filename]-[file:ffp-name-only-original].[file:ffp-extension-original]';
+
   /**
    * {@inheritdoc}
    */
@@ -212,12 +214,13 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
    * {@inheritdoc}
    */
   public function setUp() {
-    parent::setUp('pdf_to_image', 'features', 'pdf_document', 'field_ui', 'filefield_paths');
+    parent::setUp('pdf_to_image', 'features', 'pdf_document', 'field_ui', 'filefield_paths', 'token');
     $this->adminUser = $this->drupalCreateUser(array(
       'access content',
       'access administration pages',
       'administer site configuration',
       'administer content types',
+      'administer fields',
       'administer nodes',
       'bypass node access',
     ));
@@ -233,11 +236,10 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
     $this->drupalGet('admin/structure/types/manage/' . $this->typeName . '/fields/' . $this->imageFieldName);
 
     // Change the image field settings to use a new storage path.
-    $custom_pattern = '[node:pdf-source-filename]-[file:ffp-name-only-original].[file:ffp-extension-original]';
     $edit = array(
       'instance[settings][filefield_paths_enabled]' => TRUE,
       'instance[settings][filefield_paths][file_path][value]' => 'custom',
-      'instance[settings][filefield_paths][file_name][value]' => $custom_pattern,
+      'instance[settings][filefield_paths][file_name][value]' => $this->customPattern,
     );
     $this->drupalPost(NULL, $edit, t('Save settings'));
 
@@ -250,10 +252,10 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
     $instance = field_info_instance('node', $this->imageFieldName, $this->typeName);
     $this->assertTrue($instance['settings']['filefield_paths']['file_path']['value'] == 'custom', 'Fieldfield path setting change was saved correctly.');
     $message = format_string(
-      'Fieldfield path setting uses a custom token pattern %custom_pattern.',
-      array('%custom_pattern' => $custom_pattern)
+      'Fieldfield path setting uses a custom token pattern %customPattern.',
+      array('%customPattern' => $this->customPattern)
     );
-    $this->assertTrue($instance['settings']['filefield_paths']['file_name']['value'] == $custom_pattern, $message);
+    $this->assertTrue($instance['settings']['filefield_paths']['file_name']['value'] == $this->customPattern, $message);
 
   }
 
@@ -300,8 +302,12 @@ class PDFToImageFilefieldPathsTest extends DrupalWebTestCase {
 
     $filename = pathinfo($node_file->uri, PATHINFO_FILENAME);
     $message = format_string(
-      'Generated image file %image_file is named after the source document, using a filefield_paths token %filename',
-      array('%image_file' => $node_image->uri, '%filename' => $filename)
+      'Generated image file %image_file is named after the source document "%filename", using a filefield_paths pattern %customPattern',
+      array(
+        '%image_file' => $node_image->uri,
+        '%filename' => $filename,
+        '%customPattern' => $this->customPattern,
+      )
     );
     $this->assertTrue(strstr($node_image->uri, $filename), $message);
 

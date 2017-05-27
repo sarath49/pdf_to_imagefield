@@ -3,3 +3,7 @@ description = Imports PDF file and split pages into image field files
 core = 7.x
 ;dependencies[] = imagemagick
 files[] = tests/pdf_to_image.test
+
+
+test_dependencies[] = filefield_paths
+test_dependencies[] = token
