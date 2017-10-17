@@ -1,0 +1,9 @@
+name: PDF to Image
+description: Autogenerates PDF preview into an image field.
+core: '8.x'
+package: Field types
+type: module
+dependencies:
+  - imagemagick:imagemagick
+  - drupal:file
+  - drupal:image
